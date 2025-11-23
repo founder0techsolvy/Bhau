@@ -1,122 +1,120 @@
 <!doctype html>
-<html lang="hi">
+<html lang="en">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>ConnectNow — 1:1 Video (Fixed)</title>
+  <title>ConnectNow - Fixed Video Call</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
-    :root{--bg:#0b0f13;--card:#0f1720;--muted:#94a3b8;--accent:#22c55e}
-    body{background:var(--bg);color:#e6eef8;font-family:Inter,system-ui,Arial}
-    .small-video{width:110px;height:80px;object-fit:cover;border-radius:8px;box-shadow:0 6px 18px rgba(0,0,0,.6)}
-    .btn{padding:.5rem 1rem;border-radius:.5rem}
-    #enableSound { position: fixed; right: 16px; bottom: 100px; z-index: 60; display:none; }
+    :root{--bg:#0b0f13;--card:#161e2a;--text:#e6eef8;--accent:#3b82f6}
+    body{background:var(--bg);color:var(--text);font-family:Inter,system-ui,sans-serif}
+    .video-card{background:#000;border-radius:12px;overflow:hidden;position:relative;box-shadow:0 10px 30px rgba(0,0,0,0.5)}
+    .local-pip{position:absolute;bottom:16px;right:16px;width:120px;height:160px;background:#222;border-radius:8px;border:2px solid rgba(255,255,255,0.1);box-shadow:0 4px 12px rgba(0,0,0,0.5);z-index:20}
+    .local-pip video{width:100%;height:100%;object-fit:cover;border-radius:6px}
+    /* Pulse animation for calling */
+    @keyframes pulse-ring{0%{transform:scale(0.8);opacity:0.5}100%{transform:scale(1.2);opacity:0}}
+    .pulse-avatar::before{content:'';position:absolute;left:0;top:0;width:100%;height:100%;border-radius:50%;border:2px solid var(--accent);animation:pulse-ring 2s infinite}
   </style>
 </head>
-<body class="min-h-screen">
-  <div class="max-w-4xl mx-auto p-4">
+<body class="min-h-screen flex flex-col">
 
-    <!-- Header -->
-    <div class="flex items-center justify-between mb-4">
+  <nav class="bg-gray-900 border-b border-gray-800 p-4">
+    <div class="max-w-5xl mx-auto flex items-center justify-between">
       <div class="flex items-center gap-3">
-        <div id="myAvatarPreview" class="w-12 h-12 rounded-full bg-gray-700"></div>
+        <div id="myAvatarDisplay" class="w-10 h-10 rounded-full bg-gray-700 bg-cover bg-center"></div>
         <div>
-          <div id="myName" class="text-lg font-semibold">ConnectNow</div>
-          <div id="myStatus" class="text-sm text-gray-400">Checking auth...</div>
+          <h1 class="font-bold text-lg tracking-tight">ConnectNow</h1>
+          <p id="connectionStatus" class="text-xs text-green-400">Online</p>
         </div>
       </div>
-      <div>
-        <button id="signOutBtn" class="bg-red-600 px-3 py-1 rounded hidden">Sign out</button>
+      <button id="logoutBtn" class="text-sm bg-red-500/10 text-red-400 px-3 py-1.5 rounded hover:bg-red-500/20 transition hidden">Sign Out</button>
+    </div>
+  </nav>
+
+  <main class="flex-1 max-w-5xl mx-auto w-full p-4 grid grid-cols-1 md:grid-cols-12 gap-6">
+    
+    <aside class="md:col-span-4 lg:col-span-3 flex flex-col gap-4 max-h-[80vh]">
+      <div class="bg-gray-900 p-4 rounded-xl border border-gray-800 flex-1 overflow-hidden flex flex-col">
+        <h2 class="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-4">Active Users</h2>
+        <div id="usersContainer" class="space-y-2 overflow-y-auto flex-1 pr-2">
+          <div class="text-gray-500 text-sm text-center mt-10">Loading users...</div>
+        </div>
+      </div>
+    </aside>
+
+    <section class="md:col-span-8 lg:col-span-9 relative">
+      
+      <div id="idleScreen" class="h-[500px] bg-gray-900 rounded-2xl border border-gray-800 flex flex-col items-center justify-center text-center p-6">
+        <div class="w-24 h-24 bg-gray-800 rounded-full flex items-center justify-center mb-4 text-4xl">👋</div>
+        <h3 class="text-xl font-medium mb-2">Ready to connect</h3>
+        <p class="text-gray-400 max-w-sm">Select a user from the list to start a video call. Ensure you allow camera and microphone permissions.</p>
+      </div>
+
+      <div id="outgoingScreen" class="hidden h-[500px] bg-gray-900 rounded-2xl border border-gray-800 flex-col items-center justify-center text-center p-6 relative">
+        <div class="pulse-avatar relative w-32 h-32 rounded-full mb-6 mx-auto">
+          <img id="outgoingAvatar" class="w-full h-full rounded-full object-cover bg-gray-700">
+        </div>
+        <h3 class="text-2xl font-bold mb-1" id="outgoingName">User</h3>
+        <p class="text-blue-400 animate-pulse mb-8">Calling...</p>
+        <button id="cancelCallBtn" class="bg-red-600 hover:bg-red-700 text-white px-8 py-3 rounded-full font-medium transition shadow-lg shadow-red-900/20">End Call</button>
+      </div>
+
+      <div id="activeScreen" class="hidden h-[500px] md:h-[600px] video-card">
+        <video id="remoteVideo" autoplay playsinline class="w-full h-full object-cover bg-gray-900"></video>
+        
+        <div class="local-pip">
+          <video id="localVideo" autoplay muted playsinline class="bg-gray-800"></video>
+        </div>
+
+        <div class="absolute bottom-6 left-0 w-full flex justify-center gap-4 z-30">
+          <button id="toggleAudioBtn" class="bg-gray-700 hover:bg-gray-600 p-4 rounded-full text-white transition backdrop-blur-md bg-opacity-80">
+            🎤
+          </button>
+          <button id="hangupBtn" class="bg-red-600 hover:bg-red-700 p-4 rounded-full text-white transition shadow-lg shadow-red-900/50">
+            📞
+          </button>
+        </div>
+        
+        <div class="absolute top-4 left-4 bg-black/60 backdrop-blur px-3 py-1.5 rounded-lg text-sm font-medium z-20">
+          <span class="w-2 h-2 bg-green-500 rounded-full inline-block mr-2"></span>
+          <span id="remoteNameTag">Connected</span>
+        </div>
+      </div>
+
+    </section>
+  </main>
+
+  <div id="incomingModal" class="fixed inset-0 bg-black/90 z-50 hidden flex items-center justify-center p-4 backdrop-blur-sm">
+    <div class="bg-gray-900 border border-gray-700 p-8 rounded-2xl max-w-sm w-full text-center shadow-2xl">
+      <img id="incomingAvatarImg" class="w-24 h-24 rounded-full mx-auto mb-4 object-cover bg-gray-800 border-4 border-gray-800">
+      <h3 id="incomingCallerName" class="text-2xl font-bold mb-1 text-white">Unknown</h3>
+      <p class="text-gray-400 mb-8">Incoming video call...</p>
+      <div class="flex gap-4 justify-center">
+        <button id="declineBtn" class="bg-red-600 text-white px-6 py-3 rounded-xl font-medium hover:bg-red-700 transition w-full">Decline</button>
+        <button id="acceptBtn" class="bg-green-600 text-white px-6 py-3 rounded-xl font-medium hover:bg-green-700 transition w-full">Accept</button>
       </div>
     </div>
-
-    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-      <!-- Users List -->
-      <div class="col-span-1 bg-[#0f1724] p-3 rounded-lg shadow">
-        <div class="flex items-center justify-between mb-3">
-          <h3 class="font-medium">Users</h3>
-          <div id="presenceCount" class="text-xs text-gray-400">0 online</div>
-        </div>
-        <div id="usersList" class="space-y-2 overflow-y-auto max-h-[60vh]"></div>
-      </div>
-
-      <!-- Right panel -->
-      <div class="col-span-2 bg-[#0f1724] p-4 rounded-lg shadow relative">
-        <div id="callStage" class="min-h-[380px] flex flex-col items-center justify-center text-center">
-          <div id="idleUI">
-            <img src="https://ui-avatars.com/api/?name=ConnectNow&background=111827&color=22c55e" class="w-36 h-36 rounded-full mx-auto mb-4" />
-            <h2 class="text-xl font-semibold">Select a user and press the video icon to call</h2>
-            <p class="text-sm text-gray-400 mt-2">One-to-one video calls. Audio + Video supported.</p>
-          </div>
-
-          <div id="outgoingUI" class="hidden w-full">
-            <div class="text-sm text-gray-300">Calling</div>
-            <div id="outgoingName" class="text-2xl font-semibold mt-2"></div>
-            <div id="outgoingAvatar" class="w-28 h-28 rounded-full bg-gray-600 mx-auto my-3"></div>
-            <div class="flex gap-3 justify-center mt-3">
-              <button id="cancelOutgoing" class="bg-red-600 px-4 py-2 rounded">Cancel</button>
-            </div>
-          </div>
-
-          <div id="incomingFull" class="hidden absolute inset-0 bg-black/80 flex items-center justify-center p-6 z-40">
-            <div class="bg-[#0b1220] p-6 rounded-lg w-full max-w-md text-center">
-              <div id="incomingAvatar" class="w-28 h-28 rounded-full bg-gray-700 mx-auto"></div>
-              <div id="incomingName" class="text-xl font-semibold mt-3"></div>
-              <div class="text-sm text-gray-400 mt-1">Calling...</div>
-              <div class="flex gap-4 justify-center mt-6">
-                <button id="declineBtn" class="bg-red-500 px-5 py-2 rounded">Decline</button>
-                <button id="acceptBtn" class="bg-green-500 px-5 py-2 rounded">Accept</button>
-              </div>
-            </div>
-          </div>
-
-          <div id="activeCallUI" class="hidden w-full h-full">
-            <div class="relative w-full h-[62vh] bg-black rounded-lg overflow-hidden">
-              <video id="remoteVideo" autoplay playsinline class="w-full h-full object-cover bg-black"></video>
-              <div class="absolute top-4 left-4">
-                <div id="remoteName" class="text-white font-semibold bg-black/40 px-3 py-1 rounded"></div>
-              </div>
-              <div class="absolute bottom-4 left-4">
-                <video id="localVideo" autoplay muted playsinline class="small-video"></video>
-              </div>
-              <div class="absolute bottom-6 right-6 flex gap-3">
-                <button id="muteBtn" class="bg-white/10 text-white px-3 py-2 rounded">Mute</button>
-                <button id="endBtn" class="bg-red-600 text-white px-4 py-2 rounded">End</button>
-              </div>
-            </div>
-          </div>
-
-        </div>
-      </div>
-    </div>
-
-    <footer class="text-xs text-gray-500 mt-4">Note: Uses STUN + public TURN (testing). For production run a private TURN/coturn server.</footer>
   </div>
 
-  <!-- ringtone -->
-  <audio id="ringtone" loop preload="auto">
-    <source src="https://actions.google.com/sounds/v1/alarms/phone_alerts_and_ringtones.ogg" type="audio/ogg">
-  </audio>
-
-  <!-- enable-sound helper (shown only if autoplay blocked) -->
-  <button id="enableSound" class="bg-yellow-400 text-black px-4 py-2 rounded">Enable sound (tap)</button>
+  <audio id="ringtoneSound" loop src="https://actions.google.com/sounds/v1/alarms/digital_watch_alarm_long.ogg"></audio>
 
   <script type="module">
-    // Firebase (modular)
+    // -------------------------------------------------------------
+    // 1. FIREBASE CONFIGURATION
+    // -------------------------------------------------------------
     import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-app.js";
-    import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-auth.js";
-    import { getFirestore, collection, doc, getDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore.js";
-    import { getDatabase, ref, set, onValue, onDisconnect, push, remove, onChildAdded } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-database.js";
+    import { getAuth, onAuthStateChanged, signOut, GoogleAuthProvider, signInWithPopup } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-auth.js";
+    import { getFirestore, collection, doc, setDoc, onSnapshot, getDoc } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore.js";
+    import { getDatabase, ref, set, onValue, push, onChildAdded, remove, onDisconnect } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-database.js";
 
     const firebaseConfig = {
-      apiKey: "AIzaSyAwB8JWKIRK6Bkat-NdM6OyVAvdrBk5cmM",
+      apiKey: "AIzaSyAwB8JWKIRK6Bkat-NdM6OyVAvdrBk5cmM", // Make sure this is valid
       authDomain: "capturedeep-126bf.firebaseapp.com",
       databaseURL: "https://capturedeep-126bf-default-rtdb.firebaseio.com",
       projectId: "capturedeep-126bf",
       storageBucket: "capturedeep-126bf.appspot.com",
       messagingSenderId: "527347157327",
-      appId: "1:527347157327:web:d7db7bb6d0fe021547dd3a",
-      measurementId: "G-VZEFR8X5BN"
+      appId: "1:527347157327:web:d7db7bb6d0fe021547dd3a"
     };
 
     const app = initializeApp(firebaseConfig);
@@ -124,505 +122,376 @@
     const db = getFirestore(app);
     const rdb = getDatabase(app);
 
-    // UI
-    const usersList = document.getElementById('usersList');
-    const myNameEl = document.getElementById('myName');
-    const myAvatarPreview = document.getElementById('myAvatarPreview');
-    const myStatus = document.getElementById('myStatus');
-    const signOutBtn = document.getElementById('signOutBtn');
-
-    const ringtone = document.getElementById('ringtone');
-    const enableSoundBtn = document.getElementById('enableSound');
-
-    const idleUI = document.getElementById('idleUI');
-    const outgoingUI = document.getElementById('outgoingUI');
-    const outgoingName = document.getElementById('outgoingName');
-    const outgoingAvatar = document.getElementById('outgoingAvatar');
-    const cancelOutgoing = document.getElementById('cancelOutgoing');
-
-    const incomingFull = document.getElementById('incomingFull');
-    const incomingName = document.getElementById('incomingName');
-    const incomingAvatar = document.getElementById('incomingAvatar');
-    const acceptBtn = document.getElementById('acceptBtn');
-    const declineBtn = document.getElementById('declineBtn');
-
-    const activeCallUI = document.getElementById('activeCallUI');
-    const remoteName = document.getElementById('remoteName');
-    const localVideo = document.getElementById('localVideo');
-    const remoteVideo = document.getElementById('remoteVideo');
-    const muteBtn = document.getElementById('muteBtn');
-    const endBtn = document.getElementById('endBtn');
-
-    // State
+    // -------------------------------------------------------------
+    // 2. STATE & DOM ELEMENTS
+    // -------------------------------------------------------------
     let myUid = null;
-    let myProfile = null;
-    let pc = null;
+    let myProfile = {};
     let localStream = null;
+    let peerConnection = null;
+    let currentCallNodeId = null; // The User ID of the person we are talking to
+    let iceCandidateQueue = [];   // BUFFER: Stores candidates until connection is ready
     let isMuted = false;
-    let currentPeerUid = null;
-    let outgoingTarget = null;
-    let outgoingTargetName = null;
-    let processedCandidates = new Set();
-    let pendingCandidates = { caller: [], callee: [] };
-    let candidateUnsubs = []; // to store unsubscribe functions
-    let userGestureUnlocked = false;
 
-    // ICE config
-    const ICE_CONFIG = {
+    // Google STUN servers are reliable. For Production, you NEED a TURN server.
+    const rtcConfig = {
       iceServers: [
-        { urls: 'stun:stun.l.google.com:19302' },
-        { urls: 'turn:global.relay.metered.ca:443', username: 'public', credential: 'public' },
-        { urls: 'turn:relay1.expressturn.com:3478', username: 'efUGnbp1KmJ3b0YO', credential: '6e3K9hK8VWJw9v9B' }
+        { urls: ['stun:stun1.l.google.com:19302', 'stun:stun2.l.google.com:19302'] }
       ]
     };
 
-    // -----------------------
-    // Auth check
-    // -----------------------
+    // DOM Elements
+    const views = {
+      idle: document.getElementById('idleScreen'),
+      outgoing: document.getElementById('outgoingScreen'),
+      active: document.getElementById('activeScreen'),
+      incoming: document.getElementById('incomingModal')
+    };
+
+    const localVideo = document.getElementById('localVideo');
+    const remoteVideo = document.getElementById('remoteVideo');
+    const ringtone = document.getElementById('ringtoneSound');
+
+    // -------------------------------------------------------------
+    // 3. AUTH & USER PRESENCE
+    // -------------------------------------------------------------
     onAuthStateChanged(auth, async (user) => {
-      if (!user) {
-        location.href = 'auth.html?msg=Please%20login%20to%20connect';
-        return;
-      }
-      myUid = user.uid;
-      myStatus.textContent = 'Loading profile...';
-      signOutBtn.classList.remove('hidden');
+      if (user) {
+        myUid = user.uid;
+        document.getElementById('logoutBtn').classList.remove('hidden');
+        
+        // Save/Update Profile
+        myProfile = {
+          name: user.displayName || 'User',
+          photoURL: user.photoURL || `https://ui-avatars.com/api/?name=${user.displayName}`,
+          email: user.email
+        };
+        
+        // Update UI
+        document.getElementById('myAvatarDisplay').style.backgroundImage = `url(${myProfile.photoURL})`;
+        
+        // Write to Firestore (so we appear in list)
+        await setDoc(doc(db, 'users', myUid), myProfile, { merge: true });
+        
+        // Write Presence to Realtime DB
+        const presenceRef = ref(rdb, `presence/${myUid}`);
+        set(presenceRef, { online: true, lastSeen: Date.now() });
+        onDisconnect(presenceRef).remove();
 
-      // load profile from Firestore
-      const profDoc = doc(db, 'users', myUid);
-      const profSnap = await getDoc(profDoc);
-      if (profSnap.exists()) {
-        myProfile = profSnap.data();
-        myProfile.name = myProfile.name || user.displayName || 'You';
-        myProfile.avatarUrl = myProfile.avatarUrl || user.photoURL || `https://ui-avatars.com/api/?name=${encodeURIComponent(myProfile.name)}`;
+        // Listeners
+        listenToUsers();
+        listenToIncomingCalls();
+        listenToICECandidates();
       } else {
-        myProfile = { name: user.displayName || 'You', avatarUrl: user.photoURL || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.displayName||'You')}` };
+        // Simple Login Trigger if not logged in
+        const provider = new GoogleAuthProvider();
+        try {
+          await signInWithPopup(auth, provider);
+        } catch (e) {
+          alert("Login failed: " + e.message);
+        }
       }
-      myNameEl.textContent = myProfile.name;
-      myAvatarPreview.style.backgroundImage = `url(${myProfile.avatarUrl})`;
-      myAvatarPreview.style.backgroundSize = 'cover';
-      myStatus.textContent = 'Online';
-
-      startPresence();
-      loadUsers();
-      startIncomingListener();
-      listenForIncomingCandidates(); // always listen on our candidate paths
-      unlockAudioOnFirstGesture();
     });
 
-    signOutBtn.addEventListener('click', async () => {
-      await signOut(auth);
-    });
+    document.getElementById('logoutBtn').onclick = () => signOut(auth);
 
-    // -----------------------
-    // Presence
-    // -----------------------
-    function startPresence(){
-      if (!myUid) return;
-      const pRef = ref(rdb, `presence/${myUid}`);
-      set(pRef, { name: myProfile.name, online: true, ts: Date.now() }).catch(console.error);
-      onDisconnect(pRef).remove().catch(console.error);
-    }
-
-    // -----------------------
-    // Load users list
-    // -----------------------
-    let usersUnsub = null;
-    function loadUsers(){
-      const usersCol = collection(db, 'users');
-      if (usersUnsub) usersUnsub();
-      usersUnsub = onSnapshot(usersCol, (snap) => {
-        usersList.innerHTML = '';
-        let onlineCount = 0;
-        snap.forEach(docSnap => {
+    function listenToUsers() {
+      const container = document.getElementById('usersContainer');
+      onSnapshot(collection(db, 'users'), (snapshot) => {
+        container.innerHTML = '';
+        if (snapshot.empty) container.innerHTML = '<div class="text-gray-500 p-4">No other users found.</div>';
+        
+        snapshot.forEach(docSnap => {
+          const uData = docSnap.data();
           const uid = docSnap.id;
-          const data = docSnap.data();
-          const name = data.name || uid;
-          const avatar = data.avatarUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}`;
-          if (uid === myUid) return;
-          const row = document.createElement('div');
-          row.className = 'flex items-center justify-between p-2 rounded hover:bg-white/2';
-          row.innerHTML = `
+          if (uid === myUid) return; // Don't show self
+
+          const div = document.createElement('div');
+          div.className = 'flex items-center justify-between bg-gray-800 p-3 rounded-lg hover:bg-gray-750 transition border border-gray-700/50';
+          div.innerHTML = `
             <div class="flex items-center gap-3">
-              <img src="${avatar}" class="w-12 h-12 rounded-full object-cover" />
-              <div>
-                <div class="font-medium">${name}</div>
-                <div id="presence-${uid}" class="text-xs text-gray-400">checking...</div>
-              </div>
+              <img src="${uData.photoURL}" class="w-10 h-10 rounded-full object-cover">
+              <div class="text-sm font-medium text-white">${uData.name}</div>
             </div>
-            <div class="flex items-center gap-2">
-              <button data-uid="${uid}" data-name="${name}" class="callBtn bg-green-600 px-3 py-1 rounded hidden md:inline">📹</button>
-              <button data-uid="${uid}" data-name="${name}" class="callBtnMobile bg-green-600 w-10 h-10 rounded-full md:hidden">📹</button>
-            </div>
+            <button class="bg-blue-600 hover:bg-blue-500 text-white p-2 rounded-full transition call-btn">
+              📹
+            </button>
           `;
-          usersList.appendChild(row);
-
-          // presence listener
-          const presRef = ref(rdb, `presence/${uid}`);
-          onValue(presRef, (snapP) => {
-            const el = document.getElementById(`presence-${uid}`);
-            if (!el) return;
-            if (snapP.exists()) {
-              el.innerHTML = `<span class="inline-block w-2 h-2 rounded-full bg-green-400 mr-2"></span>Online`;
-              onlineCount++;
-            } else {
-              el.innerHTML = `<span class="inline-block w-2 h-2 rounded-full bg-gray-500 mr-2"></span>Offline`;
-            }
-            document.getElementById('presenceCount').textContent = onlineCount + ' online';
-          });
-        });
-
-        document.querySelectorAll('.callBtn, .callBtnMobile').forEach(btn => {
-          btn.onclick = () => {
-            const targetUid = btn.dataset.uid;
-            const targetName = btn.dataset.name;
-            startOutgoingCall(targetUid, targetName);
-          };
+          
+          div.querySelector('.call-btn').onclick = () => startOutgoingCall(uid, uData);
+          container.appendChild(div);
         });
       });
     }
 
-    // -----------------------
-    // Incoming calls listener
-    // -----------------------
-    function startIncomingListener(){
-      const myCallRef = ref(rdb, `calls/${myUid}`);
-      onValue(myCallRef, (snap) => {
-        const data = snap.val();
-        if (!data) {
-          // cleared
-          return;
-        }
-        if (data.type === 'offer' && data.from) {
-          // show incoming
-          showIncoming(data);
-        } else if (data.type === 'answer' && data.answer && outgoingTarget && data.from === outgoingTarget) {
-          // caller receives answer
-          const sd = { type: 'answer', sdp: data.answer };
-          if (pc && !pc.currentRemoteDescription) {
-            pc.setRemoteDescription(sd).then(() => {
-              showActiveCallUI(outgoingTargetName || 'Call');
-            }).catch(console.error);
-          }
-        } else if (data.type === 'decline' && data.from) {
-          stopOutgoing('declined');
-        } else if (data.type === 'end' && data.from) {
-          endCallCleanup();
-        }
-      });
-    }
+    // -------------------------------------------------------------
+    // 4. WEBRTC CORE LOGIC (The Fix)
+    // -------------------------------------------------------------
 
-    // -----------------------
-    // Candidate listeners (always listen for children added to our candidate slots)
-    // -----------------------
-    function listenForIncomingCandidates(){
-      // caller candidates for me
-      const callerRef = ref(rdb, `candidates/${myUid}/caller`);
-      const unsub1 = onChildAdded(callerRef, (snap) => {
-        const cand = snap.val();
-        if (!cand) return;
-        if (pc) {
-          pc.addIceCandidate(cand).catch(e => console.error('addIce error caller->', e));
-        } else {
-          pendingCandidates.caller.push(cand);
-        }
-      });
-      candidateUnsubs.push(unsub1);
-
-      // callee candidates for me
-      const calleeRef = ref(rdb, `candidates/${myUid}/callee`);
-      const unsub2 = onChildAdded(calleeRef, (snap) => {
-        const cand = snap.val();
-        if (!cand) return;
-        if (pc) {
-          pc.addIceCandidate(cand).catch(e => console.error('addIce error callee->', e));
-        } else {
-          pendingCandidates.callee.push(cand);
-        }
-      });
-      candidateUnsubs.push(unsub2);
-    }
-
-    // -----------------------
-    // Outgoing call (caller)
-    // -----------------------
-    async function startOutgoingCall(targetUid, targetName){
-      if (!myUid) return alert('Not signed in');
-      if (pc) return alert('Already in call');
-
-      outgoingTarget = targetUid;
-      outgoingTargetName = targetName;
-
-      idleUI.style.display = 'none';
-      outgoingUI.style.display = 'block';
-      outgoingName.textContent = targetName;
-      outgoingAvatar.style.backgroundImage = `url('')`;
-      tryPlayRingtone();
-
-      // get local media FIRST
+    async function initializeMedia() {
       try {
         localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
         localVideo.srcObject = localStream;
+        return true;
       } catch (err) {
-        console.error('media error', err);
-        alert('Allow camera & mic to make calls');
-        stopOutgoing('media-fail');
-        return;
+        console.error("Media Error:", err);
+        alert("Could not access camera/mic. Please check permissions.");
+        return false;
       }
+    }
 
-      // create pc
-      pc = new RTCPeerConnection(ICE_CONFIG);
+    function createPeerConnection(targetUid) {
+      peerConnection = new RTCPeerConnection(rtcConfig);
 
-      // drain pending candidates when ready
-      const drainPending = () => {
-        pendingCandidates.caller.forEach(c => pc.addIceCandidate(c).catch(console.error));
-        pendingCandidates.callee.forEach(c => pc.addIceCandidate(c).catch(console.error));
-        pendingCandidates = { caller: [], callee: [] };
-      };
+      // 1. Add Local Tracks
+      localStream.getTracks().forEach(track => {
+        peerConnection.addTrack(track, localStream);
+      });
 
-      // add local tracks
-      localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
-
-      pc.ontrack = (ev) => {
-        remoteVideo.srcObject = ev.streams[0];
-      };
-
-      // push our ICE candidates to target's 'caller' slot
-      pc.onicecandidate = (event) => {
-        if (event.candidate) {
-          push(ref(rdb, `candidates/${targetUid}/caller`), event.candidate.toJSON()).catch(console.error);
+      // 2. Handle Remote Tracks (Video appears here)
+      peerConnection.ontrack = (event) => {
+        if (remoteVideo.srcObject !== event.streams[0]) {
+          remoteVideo.srcObject = event.streams[0];
+          console.log("Remote stream received!");
         }
       };
 
-      // create offer AFTER tracks added
-      const offer = await pc.createOffer();
-      await pc.setLocalDescription(offer);
+      // 3. Handle ICE Candidates (Network details)
+      peerConnection.onicecandidate = (event) => {
+        if (event.candidate) {
+          // Send to Firebase under the TARGET's ID
+          const path = `candidates/${targetUid}`;
+          push(ref(rdb, path), {
+            candidate: event.candidate.toJSON(),
+            from: myUid
+          });
+        }
+      };
+      
+      // 4. Connection State Logging
+      peerConnection.onconnectionstatechange = () => {
+        console.log("Connection State:", peerConnection.connectionState);
+        if(peerConnection.connectionState === 'disconnected') endCall();
+      };
 
-      // write offer to target's call node
+      return peerConnection;
+    }
+
+    // THE FIX: Strict Queue Processing
+    async function addBufferedCandidates() {
+      if (!peerConnection || !peerConnection.remoteDescription) return;
+      
+      console.log(`Flushing ${iceCandidateQueue.length} candidates...`);
+      while (iceCandidateQueue.length > 0) {
+        const candidate = iceCandidateQueue.shift();
+        try {
+          await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+        } catch (e) {
+          console.warn("Candidate fail:", e);
+        }
+      }
+    }
+
+    // -------------------------------------------------------------
+    // 5. CALLING FLOW (Caller)
+    // -------------------------------------------------------------
+    async function startOutgoingCall(targetUid, targetProfile) {
+      currentCallNodeId = targetUid;
+      
+      // UI Updates
+      views.idle.classList.add('hidden');
+      views.outgoing.classList.remove('hidden');
+      views.outgoing.style.display = 'flex';
+      document.getElementById('outgoingName').textContent = targetProfile.name;
+      document.getElementById('outgoingAvatar').src = targetProfile.photoURL;
+      
+      const hasMedia = await initializeMedia();
+      if (!hasMedia) return endCall();
+
+      createPeerConnection(targetUid);
+
+      // Create Offer
+      const offer = await peerConnection.createOffer();
+      await peerConnection.setLocalDescription(offer);
+
+      // Send Offer to Firebase
       await set(ref(rdb, `calls/${targetUid}`), {
         type: 'offer',
+        sdp: offer.sdp,
         from: myUid,
-        name: myProfile.name || '',
-        avatar: myProfile.avatarUrl || '',
-        offer: offer.sdp,
-        ts: Date.now()
-      }).catch(console.error);
+        callerName: myProfile.name,
+        callerPhoto: myProfile.photoURL
+      });
 
-      // Listen for callee candidates (they will push to our /candidates/{myUid}/callee) handled by onChildAdded listener earlier
-      drainPending();
-      showActiveCallUI(targetName); // will show active UI once remote tracks arrive and answer is set
-    }
+      // Listen for Answer
+      const answerRef = ref(rdb, `calls/${myUid}`);
+      onValue(answerRef, async (snapshot) => {
+        const data = snapshot.val();
+        if (!peerConnection || !data) return;
 
-    // cancel outgoing
-    cancelOutgoing.onclick = async () => {
-      if (!outgoingTarget) { stopOutgoing('cancel'); return; }
-      try { await set(ref(rdb, `calls/${outgoingTarget}`), null); } catch(e){}
-      stopOutgoing('cancelled');
-    };
+        if (data.type === 'answer' && peerConnection.signalingState === 'have-local-offer') {
+          // Set Remote Description
+          const rsd = new RTCSessionDescription({ type: 'answer', sdp: data.sdp });
+          await peerConnection.setRemoteDescription(rsd);
+          
+          // NOW it is safe to add queued candidates
+          addBufferedCandidates();
 
-    function stopOutgoing(reason){
-      ringtone.pause(); ringtone.currentTime = 0;
-      idleUI.style.display = 'block';
-      outgoingUI.style.display = 'none';
-      outgoingTarget = null;
-      outgoingTargetName = null;
-      if (pc) { try { pc.close(); } catch(e){} pc = null; }
-    }
-
-    // -----------------------
-    // Incoming call UI
-    // -----------------------
-    let currentIncoming = null;
-    function showIncoming(data){
-      currentIncoming = data;
-      incomingName.textContent = data.name || data.from;
-      incomingAvatar.style.backgroundImage = `url(${data.avatar||'https://ui-avatars.com/api/?name='+encodeURIComponent(data.name||data.from)})`;
-      incomingAvatar.style.backgroundSize = 'cover';
-      incomingFull.style.display = 'flex';
-      tryPlayRingtone();
-    }
-
-    declineBtn.onclick = async () => {
-      ringtone.pause(); ringtone.currentTime = 0;
-      if (currentIncoming && currentIncoming.from) {
-        await set(ref(rdb, `calls/${currentIncoming.from}`), {
-          type: 'decline',
-          from: myUid,
-          ts: Date.now()
-        }).catch(console.error);
-      }
-      await set(ref(rdb, `calls/${myUid}`), null).catch(()=>{});
-      incomingFull.style.display = 'none';
-      currentIncoming = null;
-    };
-
-    // Accept incoming
-    acceptBtn.onclick = async () => {
-      ringtone.pause(); ringtone.currentTime = 0;
-      if (!currentIncoming) return;
-      const callerUid = currentIncoming.from;
-      currentPeerUid = callerUid;
-
-      try {
-        localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-        localVideo.srcObject = localStream;
-      } catch (err) {
-        console.error('media error', err);
-        alert('Allow camera & mic to accept calls');
-        return;
-      }
-
-      pc = new RTCPeerConnection(ICE_CONFIG);
-
-      localStream.getTracks().forEach(t => pc.addTrack(t, localStream));
-
-      pc.ontrack = (e) => {
-        remoteVideo.srcObject = e.streams[0];
-      };
-
-      pc.onicecandidate = (event) => {
-        if (event.candidate) {
-          push(ref(rdb, `candidates/${callerUid}/callee`), event.candidate.toJSON()).catch(console.error);
+          // Switch to Active View
+          views.outgoing.classList.add('hidden');
+          views.active.classList.remove('hidden');
+          views.active.style.display = 'block';
+          document.getElementById('remoteNameTag').textContent = targetProfile.name;
+        } 
+        else if (data.type === 'reject') {
+          alert("Call declined");
+          endCall();
         }
-      };
+      });
+    }
 
-      // set remote description from offer
-      const offer = { type: 'offer', sdp: currentIncoming.offer };
-      await pc.setRemoteDescription(offer).catch(console.error);
+    // -------------------------------------------------------------
+    // 6. INCOMING FLOW (Callee)
+    // -------------------------------------------------------------
+    function listenToIncomingCalls() {
+      const myCallRef = ref(rdb, `calls/${myUid}`);
+      onValue(myCallRef, (snapshot) => {
+        const data = snapshot.val();
+        if (data && data.type === 'offer') {
+          // Show Modal
+          currentCallNodeId = data.from;
+          document.getElementById('incomingCallerName').textContent = data.callerName;
+          document.getElementById('incomingAvatarImg').src = data.callerPhoto;
+          views.incoming.classList.remove('hidden');
+          views.incoming.style.display = 'flex';
+          
+          // Play Ringtone
+          ringtone.currentTime = 0;
+          ringtone.play().catch(e => console.log("Autoplay blocked"));
 
-      // create answer
-      const answer = await pc.createAnswer();
-      await pc.setLocalDescription(answer);
+          // Handle Accept
+          document.getElementById('acceptBtn').onclick = () => acceptCall(data);
+          
+          // Handle Decline
+          document.getElementById('declineBtn').onclick = () => {
+            set(ref(rdb, `calls/${data.from}`), { type: 'reject' }); // Tell caller
+            set(ref(rdb, `calls/${myUid}`), null); // Clear my node
+            views.incoming.classList.add('hidden');
+            ringtone.pause();
+          };
+        }
+      });
+    }
 
-      // write answer to caller's call node
-      await set(ref(rdb, `calls/${callerUid}`), {
+    async function acceptCall(data) {
+      ringtone.pause();
+      views.incoming.classList.add('hidden');
+      views.idle.classList.add('hidden');
+      views.active.classList.remove('hidden');
+      views.active.style.display = 'block';
+      document.getElementById('remoteNameTag').textContent = data.callerName;
+
+      const hasMedia = await initializeMedia();
+      if (!hasMedia) return;
+
+      createPeerConnection(currentCallNodeId);
+
+      // Set Remote Description (The Offer)
+      const rsd = new RTCSessionDescription({ type: 'offer', sdp: data.sdp });
+      await peerConnection.setRemoteDescription(rsd);
+      
+      // Process any candidates that arrived while we were clicking "Accept"
+      addBufferedCandidates();
+
+      // Create Answer
+      const answer = await peerConnection.createAnswer();
+      await peerConnection.setLocalDescription(answer);
+
+      // Send Answer back to Caller
+      await set(ref(rdb, `calls/${data.from}`), {
         type: 'answer',
-        from: myUid,
-        answer: answer.sdp,
-        ts: Date.now()
-      }).catch(console.error);
-
-      // drain any pending candidates
-      pendingCandidates.caller.forEach(c => pc.addIceCandidate(c).catch(console.error));
-      pendingCandidates.caller = [];
-      pendingCandidates.callee.forEach(c => pc.addIceCandidate(c).catch(console.error));
-      pendingCandidates.callee = [];
-
-      incomingFull.style.display = 'none';
-      showActiveCallUI(currentIncoming.name || currentIncoming.from);
-    };
-
-    // -----------------------
-    // Show active ui
-    // -----------------------
-    function showActiveCallUI(peerName){
-      idleUI.style.display = 'none';
-      outgoingUI.style.display = 'none';
-      activeCallUI.style.display = 'block';
-      remoteName.textContent = peerName || 'Call';
-      if (!currentPeerUid && outgoingTarget) currentPeerUid = outgoingTarget;
+        sdp: answer.sdp,
+        from: myUid
+      });
     }
 
-    // Mute toggle
-    muteBtn.onclick = () => {
-      if (!localStream) return;
-      isMuted = !isMuted;
-      localStream.getAudioTracks().forEach(t => t.enabled = !isMuted);
-      muteBtn.textContent = isMuted ? 'Unmute' : 'Mute';
-    };
+    // -------------------------------------------------------------
+    // 7. CANDIDATE LISTENER (The Key to Connectivity)
+    // -------------------------------------------------------------
+    function listenToICECandidates() {
+      // We listen to candidates sent TO us
+      const myCandidatesRef = ref(rdb, `candidates/${myUid}`);
+      onChildAdded(myCandidatesRef, (snapshot) => {
+        const val = snapshot.val();
+        if (!val || !val.candidate) return;
 
-    // End call
-    endBtn.onclick = async () => {
-      if (currentPeerUid) {
-        await set(ref(rdb, `calls/${currentPeerUid}`), {
-          type: 'end',
-          from: myUid,
-          ts: Date.now()
-        }).catch(console.error);
-      }
-      endCallCleanup();
-    };
-
-    function endCallCleanup(){
-      ringtone.pause(); ringtone.currentTime = 0;
-      if (pc) { try { pc.close(); } catch(e) {} pc = null; }
-      if (localStream) { localStream.getTracks().forEach(t => t.stop()); localStream = null; }
-      remoteVideo.srcObject = null;
-      localVideo.srcObject = null;
-      isMuted = false;
-      muteBtn.textContent = 'Mute';
-      activeCallUI.style.display = 'none';
-      incomingFull.style.display = 'none';
-      idleUI.style.display = 'block';
-
-      // cleanup RTDB
-      if (currentPeerUid) {
-        set(ref(rdb, `calls/${currentPeerUid}`), null).catch(()=>{});
-        set(ref(rdb, `candidates/${currentPeerUid}`), null).catch(()=>{});
-      }
-      set(ref(rdb, `calls/${myUid}`), null).catch(()=>{});
-      set(ref(rdb, `candidates/${myUid}`), null).catch(()=>{});
-
-      currentPeerUid = null;
-      outgoingTarget = null;
-      outgoingTargetName = null;
-      processedCandidates.clear();
-    }
-
-    // -----------------------
-    // Unlock audio on first gesture & enableSound button fallback
-    // -----------------------
-    function unlockAudioOnFirstGesture(){
-      const unlock = async () => {
-        try {
-          await ringtone.play();
-          ringtone.pause();
-          ringtone.currentTime = 0;
-          userGestureUnlocked = true;
-          enableSoundBtn.style.display = 'none';
-        } catch (e) {
-          userGestureUnlocked = false;
-          enableSoundBtn.style.display = 'block';
+        // CRITICAL FIX:
+        // If PC doesn't exist OR Remote Description isn't set yet, QUEUE IT.
+        if (!peerConnection || !peerConnection.remoteDescription) {
+          iceCandidateQueue.push(val.candidate);
+        } else {
+          peerConnection.addIceCandidate(new RTCIceCandidate(val.candidate))
+            .catch(e => console.error("AddIce Error", e));
         }
-      };
-      document.body.addEventListener('click', unlock, { once: true });
-      enableSoundBtn.onclick = async () => {
-        try {
-          await ringtone.play();
-          ringtone.pause();
-          ringtone.currentTime = 0;
-          userGestureUnlocked = true;
-          enableSoundBtn.style.display = 'none';
-        } catch (e) {
-          console.warn('Enable sound failed', e);
-        }
-      };
+      });
     }
 
-    async function tryPlayRingtone(){
-      if (!userGestureUnlocked) {
-        // try once; browser may block
-        try { await ringtone.play(); } catch(e){ enableSoundBtn.style.display = 'block'; }
-        return;
+    // -------------------------------------------------------------
+    // 8. UTILITIES
+    // -------------------------------------------------------------
+    function endCall() {
+      // Cleanup WebRTC
+      if (peerConnection) {
+        peerConnection.close();
+        peerConnection = null;
       }
-      try { await ringtone.play(); } catch(e){ enableSoundBtn.style.display = 'block'; }
+      if (localStream) {
+        localStream.getTracks().forEach(t => t.stop());
+        localStream = null;
+      }
+      
+      // Cleanup UI
+      views.idle.classList.remove('hidden');
+      views.outgoing.classList.add('hidden');
+      views.active.classList.add('hidden');
+      views.incoming.classList.add('hidden');
+      
+      // Cleanup DB
+      if (currentCallNodeId) {
+        // Clear candidates
+        set(ref(rdb, `candidates/${currentCallNodeId}`), null);
+        set(ref(rdb, `candidates/${myUid}`), null);
+        // Clear signals
+        set(ref(rdb, `calls/${currentCallNodeId}`), null);
+        set(ref(rdb, `calls/${myUid}`), null);
+      }
+      
+      iceCandidateQueue = [];
+      currentCallNodeId = null;
+      ringtone.pause();
+      window.location.reload(); // Hard reset for cleanliness in single-file app
     }
 
-    // -----------------------
-    // Clean presence & calls on unload
-    // -----------------------
-    window.addEventListener('beforeunload', async () => {
-      if (myUid) {
-        await set(ref(rdb, `presence/${myUid}`), null).catch(()=>{});
-        await set(ref(rdb, `calls/${myUid}`), null).catch(()=>{});
+    document.getElementById('cancelCallBtn').onclick = endCall;
+    document.getElementById('hangupBtn').onclick = endCall;
+    
+    document.getElementById('toggleAudioBtn').onclick = () => {
+      if(localStream){
+        isMuted = !isMuted;
+        localStream.getAudioTracks()[0].enabled = !isMuted;
+        document.getElementById('toggleAudioBtn').textContent = isMuted ? '🔇' : '🎤';
+        document.getElementById('toggleAudioBtn').classList.toggle('bg-red-500');
+      }
+    };
+
+    // Clean up on window close
+    window.addEventListener('beforeunload', () => {
+      if(myUid) {
+         set(ref(rdb, `presence/${myUid}`), null);
+         if(currentCallNodeId) endCall();
       }
     });
 
-    // -----------------------
-    // Helpers: onChildAdded polyfill fallback if not supported
-    // (we already imported onChildAdded above)
-    // -----------------------
-    // End of script
   </script>
 </body>
 </html>
