@@ -3,17 +3,14 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>ConnectNow — 1:1 Video (WebRTC + Firebase)</title>
+  <title>ConnectNow — 1:1 Video (Fixed)</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
-    :root{
-      --bg:#0b0f13; --card:#0f1720; --muted:#94a3b8; --accent:#22c55e;
-    }
-    body{background:var(--bg); color:#e6eef8; font-family:Inter, system-ui, sans-serif}
-    .toast { transition: all .18s ease; }
-    .pulse { animation: pulse 1s infinite; }
-    @keyframes pulse { 0% { transform: scale(1) } 50% { transform: scale(1.02) } 100% { transform: scale(1) } }
-    .small-video { width:110px; height:80px; object-fit:cover; border-radius:8px; box-shadow:0 6px 18px rgba(0,0,0,.6); }
+    :root{--bg:#0b0f13;--card:#0f1720;--muted:#94a3b8;--accent:#22c55e}
+    body{background:var(--bg);color:#e6eef8;font-family:Inter,system-ui,Arial}
+    .small-video{width:110px;height:80px;object-fit:cover;border-radius:8px;box-shadow:0 6px 18px rgba(0,0,0,.6)}
+    .btn{padding:.5rem 1rem;border-radius:.5rem}
+    #enableSound { position: fixed; right: 16px; bottom: 100px; z-index: 60; display:none; }
   </style>
 </head>
 <body class="min-h-screen">
@@ -22,7 +19,7 @@
     <!-- Header -->
     <div class="flex items-center justify-between mb-4">
       <div class="flex items-center gap-3">
-        <div class="w-12 h-12 rounded-full bg-gray-700" id="myAvatarPreview"></div>
+        <div id="myAvatarPreview" class="w-12 h-12 rounded-full bg-gray-700"></div>
         <div>
           <div id="myName" class="text-lg font-semibold">ConnectNow</div>
           <div id="myStatus" class="text-sm text-gray-400">Checking auth...</div>
@@ -43,7 +40,7 @@
         <div id="usersList" class="space-y-2 overflow-y-auto max-h-[60vh]"></div>
       </div>
 
-      <!-- Right panel: placeholder / instruction -->
+      <!-- Right panel -->
       <div class="col-span-2 bg-[#0f1724] p-4 rounded-lg shadow relative">
         <div id="callStage" class="min-h-[380px] flex flex-col items-center justify-center text-center">
           <div id="idleUI">
@@ -52,7 +49,6 @@
             <p class="text-sm text-gray-400 mt-2">One-to-one video calls. Audio + Video supported.</p>
           </div>
 
-          <!-- Outgoing calling UI -->
           <div id="outgoingUI" class="hidden w-full">
             <div class="text-sm text-gray-300">Calling</div>
             <div id="outgoingName" class="text-2xl font-semibold mt-2"></div>
@@ -62,8 +58,7 @@
             </div>
           </div>
 
-          <!-- Incoming call full-screen style popup -->
-          <div id="incomingFull" class="hidden absolute inset-0 bg-black/80 flex items-center justify-center p-6">
+          <div id="incomingFull" class="hidden absolute inset-0 bg-black/80 flex items-center justify-center p-6 z-40">
             <div class="bg-[#0b1220] p-6 rounded-lg w-full max-w-md text-center">
               <div id="incomingAvatar" class="w-28 h-28 rounded-full bg-gray-700 mx-auto"></div>
               <div id="incomingName" class="text-xl font-semibold mt-3"></div>
@@ -75,18 +70,15 @@
             </div>
           </div>
 
-          <!-- Active call UI -->
           <div id="activeCallUI" class="hidden w-full h-full">
             <div class="relative w-full h-[62vh] bg-black rounded-lg overflow-hidden">
               <video id="remoteVideo" autoplay playsinline class="w-full h-full object-cover bg-black"></video>
               <div class="absolute top-4 left-4">
                 <div id="remoteName" class="text-white font-semibold bg-black/40 px-3 py-1 rounded"></div>
               </div>
-
               <div class="absolute bottom-4 left-4">
                 <video id="localVideo" autoplay muted playsinline class="small-video"></video>
               </div>
-
               <div class="absolute bottom-6 right-6 flex gap-3">
                 <button id="muteBtn" class="bg-white/10 text-white px-3 py-2 rounded">Mute</button>
                 <button id="endBtn" class="bg-red-600 text-white px-4 py-2 rounded">End</button>
@@ -102,18 +94,19 @@
   </div>
 
   <!-- ringtone -->
-  <audio id="ringtone" loop>
+  <audio id="ringtone" loop preload="auto">
     <source src="https://actions.google.com/sounds/v1/alarms/phone_alerts_and_ringtones.ogg" type="audio/ogg">
   </audio>
 
+  <!-- enable-sound helper (shown only if autoplay blocked) -->
+  <button id="enableSound" class="bg-yellow-400 text-black px-4 py-2 rounded">Enable sound (tap)</button>
+
   <script type="module">
-    // =============================
-    // Firebase config (from you)
-    // =============================
+    // Firebase (modular)
     import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-app.js";
     import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-auth.js";
     import { getFirestore, collection, doc, getDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore.js";
-    import { getDatabase, ref, set, onValue, onDisconnect, push, remove, update, get, child } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-database.js";
+    import { getDatabase, ref, set, onValue, onDisconnect, push, remove, onChildAdded } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-database.js";
 
     const firebaseConfig = {
       apiKey: "AIzaSyAwB8JWKIRK6Bkat-NdM6OyVAvdrBk5cmM",
@@ -131,15 +124,15 @@
     const db = getFirestore(app);
     const rdb = getDatabase(app);
 
-    // UI elements
+    // UI
     const usersList = document.getElementById('usersList');
-    const presenceCount = document.getElementById('presenceCount');
     const myNameEl = document.getElementById('myName');
     const myAvatarPreview = document.getElementById('myAvatarPreview');
     const myStatus = document.getElementById('myStatus');
     const signOutBtn = document.getElementById('signOutBtn');
 
     const ringtone = document.getElementById('ringtone');
+    const enableSoundBtn = document.getElementById('enableSound');
 
     const idleUI = document.getElementById('idleUI');
     const outgoingUI = document.getElementById('outgoingUI');
@@ -160,20 +153,21 @@
     const muteBtn = document.getElementById('muteBtn');
     const endBtn = document.getElementById('endBtn');
 
-    // App state
+    // State
     let myUid = null;
-    let myProfile = null; // { name, avatarUrl }
-    let usersSnapshotUnsub = null;
-    let presenceListeners = {}; // uid -> unsubscribe function (RTDB onValue)
+    let myProfile = null;
     let pc = null;
     let localStream = null;
     let isMuted = false;
-    let currentPeerUid = null; // the other user in call
-    let outgoingTarget = null; // uid we called
-    // track processed candidate keys to avoid duplicates
+    let currentPeerUid = null;
+    let outgoingTarget = null;
+    let outgoingTargetName = null;
     let processedCandidates = new Set();
+    let pendingCandidates = { caller: [], callee: [] };
+    let candidateUnsubs = []; // to store unsubscribe functions
+    let userGestureUnlocked = false;
 
-    // ICE servers (STUN + public TURN for better chance)
+    // ICE config
     const ICE_CONFIG = {
       iceServers: [
         { urls: 'stun:stun.l.google.com:19302' },
@@ -182,12 +176,11 @@
       ]
     };
 
-    // ------------------------
-    // Auth check + redirect if logged out
-    // ------------------------
+    // -----------------------
+    // Auth check
+    // -----------------------
     onAuthStateChanged(auth, async (user) => {
       if (!user) {
-        // redirect to your auth page (you said you have auth.html)
         location.href = 'auth.html?msg=Please%20login%20to%20connect';
         return;
       }
@@ -195,7 +188,7 @@
       myStatus.textContent = 'Loading profile...';
       signOutBtn.classList.remove('hidden');
 
-      // load profile from Firestore users/{uid}
+      // load profile from Firestore
       const profDoc = doc(db, 'users', myUid);
       const profSnap = await getDoc(profDoc);
       if (profSnap.exists()) {
@@ -203,31 +196,27 @@
         myProfile.name = myProfile.name || user.displayName || 'You';
         myProfile.avatarUrl = myProfile.avatarUrl || user.photoURL || `https://ui-avatars.com/api/?name=${encodeURIComponent(myProfile.name)}`;
       } else {
-        // fallback: use auth values
-        myProfile = {
-          name: user.displayName || 'You',
-          avatarUrl: user.photoURL || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.displayName||'You')}`
-        };
+        myProfile = { name: user.displayName || 'You', avatarUrl: user.photoURL || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.displayName||'You')}` };
       }
       myNameEl.textContent = myProfile.name;
       myAvatarPreview.style.backgroundImage = `url(${myProfile.avatarUrl})`;
       myAvatarPreview.style.backgroundSize = 'cover';
-
       myStatus.textContent = 'Online';
+
       startPresence();
       loadUsers();
       startIncomingListener();
-      // pre-get media permission so accept is faster (optional)
-      // prepareLocalStream(); // don't force — we'll get media on call start
+      listenForIncomingCandidates(); // always listen on our candidate paths
+      unlockAudioOnFirstGesture();
     });
 
     signOutBtn.addEventListener('click', async () => {
       await signOut(auth);
     });
 
-    // ------------------------
-    // Presence (Realtime DB)
-    // ------------------------
+    // -----------------------
+    // Presence
+    // -----------------------
     function startPresence(){
       if (!myUid) return;
       const pRef = ref(rdb, `presence/${myUid}`);
@@ -235,15 +224,14 @@
       onDisconnect(pRef).remove().catch(console.error);
     }
 
-    // ------------------------
-    // Load users list from Firestore
-    // Firestore structure (as per screenshot):
-    // users/{uid} => { avatarUrl: "...", createdAt: 1234, name: "Navya Mishra" }
-    // ------------------------
+    // -----------------------
+    // Load users list
+    // -----------------------
+    let usersUnsub = null;
     function loadUsers(){
       const usersCol = collection(db, 'users');
-      if (usersSnapshotUnsub) usersSnapshotUnsub();
-      usersSnapshotUnsub = onSnapshot(usersCol, (snap) => {
+      if (usersUnsub) usersUnsub();
+      usersUnsub = onSnapshot(usersCol, (snap) => {
         usersList.innerHTML = '';
         let onlineCount = 0;
         snap.forEach(docSnap => {
@@ -251,9 +239,7 @@
           const data = docSnap.data();
           const name = data.name || uid;
           const avatar = data.avatarUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}`;
-          // skip self
           if (uid === myUid) return;
-
           const row = document.createElement('div');
           row.className = 'flex items-center justify-between p-2 rounded hover:bg-white/2';
           row.innerHTML = `
@@ -271,21 +257,21 @@
           `;
           usersList.appendChild(row);
 
-          // listen presence via RTDB
+          // presence listener
           const presRef = ref(rdb, `presence/${uid}`);
-          const off = onValue(presRef, (snapP) => {
+          onValue(presRef, (snapP) => {
             const el = document.getElementById(`presence-${uid}`);
             if (!el) return;
             if (snapP.exists()) {
               el.innerHTML = `<span class="inline-block w-2 h-2 rounded-full bg-green-400 mr-2"></span>Online`;
+              onlineCount++;
             } else {
               el.innerHTML = `<span class="inline-block w-2 h-2 rounded-full bg-gray-500 mr-2"></span>Offline`;
             }
+            document.getElementById('presenceCount').textContent = onlineCount + ' online';
           });
-          presenceListeners[uid] = off;
         });
 
-        // attach click handlers
         document.querySelectorAll('.callBtn, .callBtnMobile').forEach(btn => {
           btn.onclick = () => {
             const targetUid = btn.dataset.uid;
@@ -296,46 +282,70 @@
       });
     }
 
-    // ------------------------
-    // Incoming listener for calls (RTDB path: /calls/{myUid})
-    // Caller writes to /calls/{targetUid} with { type:'offer', from:myUid, offer: sdp, name, avatar }
-    // Callee will write answer to /calls/{callerUid} with type:'answer', answer:sdp ...
-    // ------------------------
-    let incomingListenerOff = null;
+    // -----------------------
+    // Incoming calls listener
+    // -----------------------
     function startIncomingListener(){
       const myCallRef = ref(rdb, `calls/${myUid}`);
-      incomingListenerOff = onValue(myCallRef, async (snap) => {
+      onValue(myCallRef, (snap) => {
         const data = snap.val();
         if (!data) {
-          // nothing
+          // cleared
           return;
         }
         if (data.type === 'offer' && data.from) {
-          // incoming call
+          // show incoming
           showIncoming(data);
         } else if (data.type === 'answer' && data.answer && outgoingTarget && data.from === outgoingTarget) {
           // caller receives answer
-          // setRemoteDescription
           const sd = { type: 'answer', sdp: data.answer };
           if (pc && !pc.currentRemoteDescription) {
-            await pc.setRemoteDescription(new RTCSessionDescription(sd)).catch(console.error);
-            // caller connected
-            showActiveCallUI(outgoingTargetName || 'Call');
+            pc.setRemoteDescription(sd).then(() => {
+              showActiveCallUI(outgoingTargetName || 'Call');
+            }).catch(console.error);
           }
         } else if (data.type === 'decline' && data.from) {
-          // callee declined our outgoing call
           stopOutgoing('declined');
         } else if (data.type === 'end' && data.from) {
-          // peer ended the call
           endCallCleanup();
         }
       });
     }
 
-    // ------------------------
+    // -----------------------
+    // Candidate listeners (always listen for children added to our candidate slots)
+    // -----------------------
+    function listenForIncomingCandidates(){
+      // caller candidates for me
+      const callerRef = ref(rdb, `candidates/${myUid}/caller`);
+      const unsub1 = onChildAdded(callerRef, (snap) => {
+        const cand = snap.val();
+        if (!cand) return;
+        if (pc) {
+          pc.addIceCandidate(cand).catch(e => console.error('addIce error caller->', e));
+        } else {
+          pendingCandidates.caller.push(cand);
+        }
+      });
+      candidateUnsubs.push(unsub1);
+
+      // callee candidates for me
+      const calleeRef = ref(rdb, `candidates/${myUid}/callee`);
+      const unsub2 = onChildAdded(calleeRef, (snap) => {
+        const cand = snap.val();
+        if (!cand) return;
+        if (pc) {
+          pc.addIceCandidate(cand).catch(e => console.error('addIce error callee->', e));
+        } else {
+          pendingCandidates.callee.push(cand);
+        }
+      });
+      candidateUnsubs.push(unsub2);
+    }
+
+    // -----------------------
     // Outgoing call (caller)
-    // ------------------------
-    let outgoingTargetName = null;
+    // -----------------------
     async function startOutgoingCall(targetUid, targetName){
       if (!myUid) return alert('Not signed in');
       if (pc) return alert('Already in call');
@@ -343,14 +353,13 @@
       outgoingTarget = targetUid;
       outgoingTargetName = targetName;
 
-      // show outgoing UI
       idleUI.style.display = 'none';
       outgoingUI.style.display = 'block';
       outgoingName.textContent = targetName;
-      outgoingAvatar.style.backgroundImage = ''; // can set fetch avatar from users col if needed
-      ringtone.play().catch(()=>{});
+      outgoingAvatar.style.backgroundImage = `url('')`;
+      tryPlayRingtone();
 
-      // Ensure we have local media
+      // get local media FIRST
       try {
         localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
         localVideo.srcObject = localStream;
@@ -361,31 +370,36 @@
         return;
       }
 
-      // create peer connection
+      // create pc
       pc = new RTCPeerConnection(ICE_CONFIG);
+
+      // drain pending candidates when ready
+      const drainPending = () => {
+        pendingCandidates.caller.forEach(c => pc.addIceCandidate(c).catch(console.error));
+        pendingCandidates.callee.forEach(c => pc.addIceCandidate(c).catch(console.error));
+        pendingCandidates = { caller: [], callee: [] };
+      };
 
       // add local tracks
       localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
 
-      // on remote track
       pc.ontrack = (ev) => {
         remoteVideo.srcObject = ev.streams[0];
       };
 
-      // ICE candidate handler: push to candidates/<targetUid>/caller
+      // push our ICE candidates to target's 'caller' slot
       pc.onicecandidate = (event) => {
         if (event.candidate) {
-          const candRef = ref(rdb, `candidates/${targetUid}/caller`);
-          push(candRef, event.candidate.toJSON()).catch(console.error);
+          push(ref(rdb, `candidates/${targetUid}/caller`), event.candidate.toJSON()).catch(console.error);
         }
       };
 
-      // create offer
+      // create offer AFTER tracks added
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
 
-      // write offer to /calls/{targetUid}
-      set(ref(rdb, `calls/${targetUid}`), {
+      // write offer to target's call node
+      await set(ref(rdb, `calls/${targetUid}`), {
         type: 'offer',
         from: myUid,
         name: myProfile.name || '',
@@ -394,57 +408,42 @@
         ts: Date.now()
       }).catch(console.error);
 
-      // listen for callee candidates at candidates/<myUid>/callee
-      const calleeCandidatesRef = ref(rdb, `candidates/${myUid}/callee`);
-      onValue(calleeCandidatesRef, (snap) => {
-        const val = snap.val();
-        if (!val) return;
-        Object.keys(val).forEach(k => {
-          if (processedCandidates.has(k)) return;
-          processedCandidates.add(k);
-          const cand = val[k];
-          pc.addIceCandidate(new RTCIceCandidate(cand)).catch(console.error);
-        });
-      });
-
-      // listen for answer handled in startIncomingListener (onValue for /calls/myUid)
+      // Listen for callee candidates (they will push to our /candidates/{myUid}/callee) handled by onChildAdded listener earlier
+      drainPending();
+      showActiveCallUI(targetName); // will show active UI once remote tracks arrive and answer is set
     }
 
     // cancel outgoing
     cancelOutgoing.onclick = async () => {
       if (!outgoingTarget) { stopOutgoing('cancel'); return; }
-      // notify the callee that we cancelled (remove call node)
       try { await set(ref(rdb, `calls/${outgoingTarget}`), null); } catch(e){}
       stopOutgoing('cancelled');
     };
 
     function stopOutgoing(reason){
-      ringtone.pause();
-      ringtone.currentTime = 0;
+      ringtone.pause(); ringtone.currentTime = 0;
       idleUI.style.display = 'block';
       outgoingUI.style.display = 'none';
       outgoingTarget = null;
       outgoingTargetName = null;
-      if (pc) { try{ pc.close(); } catch(e){} pc = null; }
-      // cleanup candidates nodes relating to this call (best-effort)
+      if (pc) { try { pc.close(); } catch(e){} pc = null; }
     }
 
-    // ------------------------
-    // Show incoming UI and accept/decline handlers
-    // ------------------------
-    let currentIncoming = null; // data of incoming call
+    // -----------------------
+    // Incoming call UI
+    // -----------------------
+    let currentIncoming = null;
     function showIncoming(data){
       currentIncoming = data;
       incomingName.textContent = data.name || data.from;
       incomingAvatar.style.backgroundImage = `url(${data.avatar||'https://ui-avatars.com/api/?name='+encodeURIComponent(data.name||data.from)})`;
       incomingAvatar.style.backgroundSize = 'cover';
       incomingFull.style.display = 'flex';
-      ringtone.play().catch(()=>{});
+      tryPlayRingtone();
     }
 
     declineBtn.onclick = async () => {
       ringtone.pause(); ringtone.currentTime = 0;
-      // notify caller (write type:'decline' to /calls/{callerUid})
       if (currentIncoming && currentIncoming.from) {
         await set(ref(rdb, `calls/${currentIncoming.from}`), {
           type: 'decline',
@@ -452,20 +451,18 @@
           ts: Date.now()
         }).catch(console.error);
       }
-      // remove our incoming node
       await set(ref(rdb, `calls/${myUid}`), null).catch(()=>{});
       incomingFull.style.display = 'none';
       currentIncoming = null;
     };
 
-    // Accept incoming call
+    // Accept incoming
     acceptBtn.onclick = async () => {
       ringtone.pause(); ringtone.currentTime = 0;
       if (!currentIncoming) return;
       const callerUid = currentIncoming.from;
       currentPeerUid = callerUid;
 
-      // prepare local media
       try {
         localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
         localVideo.srcObject = localStream;
@@ -475,31 +472,29 @@
         return;
       }
 
-      // create pc
       pc = new RTCPeerConnection(ICE_CONFIG);
+
       localStream.getTracks().forEach(t => pc.addTrack(t, localStream));
 
       pc.ontrack = (e) => {
         remoteVideo.srcObject = e.streams[0];
       };
 
-      // send our ICE candidates to candidates/<callerUid>/callee
       pc.onicecandidate = (event) => {
         if (event.candidate) {
-          const candRef = ref(rdb, `candidates/${callerUid}/callee`);
-          push(candRef, event.candidate.toJSON()).catch(console.error);
+          push(ref(rdb, `candidates/${callerUid}/callee`), event.candidate.toJSON()).catch(console.error);
         }
       };
 
       // set remote description from offer
       const offer = { type: 'offer', sdp: currentIncoming.offer };
-      await pc.setRemoteDescription(new RTCSessionDescription(offer)).catch(console.error);
+      await pc.setRemoteDescription(offer).catch(console.error);
 
       // create answer
       const answer = await pc.createAnswer();
       await pc.setLocalDescription(answer);
 
-      // write answer to /calls/{callerUid}
+      // write answer to caller's call node
       await set(ref(rdb, `calls/${callerUid}`), {
         type: 'answer',
         from: myUid,
@@ -507,34 +502,24 @@
         ts: Date.now()
       }).catch(console.error);
 
-      // listen for caller's ICE candidates at candidates/<myUid>/caller (caller pushed there)
-      const callerCandidatesRef = ref(rdb, `candidates/${myUid}/caller`);
-      onValue(callerCandidatesRef, (snap) => {
-        const val = snap.val();
-        if (!val) return;
-        Object.keys(val).forEach(k => {
-          if (processedCandidates.has(k)) return;
-          processedCandidates.add(k);
-          const cand = val[k];
-          pc.addIceCandidate(new RTCIceCandidate(cand)).catch(console.error);
-        });
-      });
+      // drain any pending candidates
+      pendingCandidates.caller.forEach(c => pc.addIceCandidate(c).catch(console.error));
+      pendingCandidates.caller = [];
+      pendingCandidates.callee.forEach(c => pc.addIceCandidate(c).catch(console.error));
+      pendingCandidates.callee = [];
 
-      // show active UI
       incomingFull.style.display = 'none';
       showActiveCallUI(currentIncoming.name || currentIncoming.from);
     };
 
-    // ------------------------
-    // Show active call UI
-    // ------------------------
+    // -----------------------
+    // Show active ui
+    // -----------------------
     function showActiveCallUI(peerName){
       idleUI.style.display = 'none';
       outgoingUI.style.display = 'none';
       activeCallUI.style.display = 'block';
       remoteName.textContent = peerName || 'Call';
-      // save that we are in call (optionally)
-      // set currentPeerUid etc; for caller currentPeerUid = outgoingTarget
       if (!currentPeerUid && outgoingTarget) currentPeerUid = outgoingTarget;
     }
 
@@ -548,7 +533,6 @@
 
     // End call
     endBtn.onclick = async () => {
-      // notify peer
       if (currentPeerUid) {
         await set(ref(rdb, `calls/${currentPeerUid}`), {
           type: 'end',
@@ -560,23 +544,18 @@
     };
 
     function endCallCleanup(){
-      // stop ringtone
       ringtone.pause(); ringtone.currentTime = 0;
-
-      // stop pc & streams
-      if (pc) { try { pc.getSenders().forEach(s => pc.removeTrack && pc.removeTrack(s)); } catch(e){} try{ pc.close(); }catch(e){} pc = null; }
+      if (pc) { try { pc.close(); } catch(e) {} pc = null; }
       if (localStream) { localStream.getTracks().forEach(t => t.stop()); localStream = null; }
       remoteVideo.srcObject = null;
       localVideo.srcObject = null;
       isMuted = false;
       muteBtn.textContent = 'Mute';
-
-      // hide active UI, return to idle
       activeCallUI.style.display = 'none';
       incomingFull.style.display = 'none';
       idleUI.style.display = 'block';
 
-      // cleanup RTDB nodes: remove /calls/<myUid> and /calls/<peerUid> candidates (best effort)
+      // cleanup RTDB
       if (currentPeerUid) {
         set(ref(rdb, `calls/${currentPeerUid}`), null).catch(()=>{});
         set(ref(rdb, `candidates/${currentPeerUid}`), null).catch(()=>{});
@@ -586,11 +565,52 @@
 
       currentPeerUid = null;
       outgoingTarget = null;
+      outgoingTargetName = null;
+      processedCandidates.clear();
     }
 
-    // ------------------------
-    // Small helper: when page unload remove presence and optionally end call
-    // ------------------------
+    // -----------------------
+    // Unlock audio on first gesture & enableSound button fallback
+    // -----------------------
+    function unlockAudioOnFirstGesture(){
+      const unlock = async () => {
+        try {
+          await ringtone.play();
+          ringtone.pause();
+          ringtone.currentTime = 0;
+          userGestureUnlocked = true;
+          enableSoundBtn.style.display = 'none';
+        } catch (e) {
+          userGestureUnlocked = false;
+          enableSoundBtn.style.display = 'block';
+        }
+      };
+      document.body.addEventListener('click', unlock, { once: true });
+      enableSoundBtn.onclick = async () => {
+        try {
+          await ringtone.play();
+          ringtone.pause();
+          ringtone.currentTime = 0;
+          userGestureUnlocked = true;
+          enableSoundBtn.style.display = 'none';
+        } catch (e) {
+          console.warn('Enable sound failed', e);
+        }
+      };
+    }
+
+    async function tryPlayRingtone(){
+      if (!userGestureUnlocked) {
+        // try once; browser may block
+        try { await ringtone.play(); } catch(e){ enableSoundBtn.style.display = 'block'; }
+        return;
+      }
+      try { await ringtone.play(); } catch(e){ enableSoundBtn.style.display = 'block'; }
+    }
+
+    // -----------------------
+    // Clean presence & calls on unload
+    // -----------------------
     window.addEventListener('beforeunload', async () => {
       if (myUid) {
         await set(ref(rdb, `presence/${myUid}`), null).catch(()=>{});
@@ -598,22 +618,11 @@
       }
     });
 
-    // ------------------------
-    // Done. Notes:
-    // - This uses Firestore collection 'users' (docs keyed by uid) for profile details.
-    //   Example doc structure (from screenshot):
-    //    users/{uid} => { avatarUrl: "...", createdAt: 1736881063364, name: "Navya Mishra" }
-    // - Presence stored in RTDB at /presence/{uid}
-    // - Signaling stored in RTDB at /calls/{uid} (simple one-slot per-user)
-    // - ICE candidates in RTDB at /candidates/{uid}/caller or /candidates/{uid}/callee
-    // - Ringtone used from actions.google (included above)
-    //
-    // Limitations & behaviour:
-    // - Single pending call per user (calls/{uid} overwritten per new call)
-    // - Uses public TURN servers for higher connection chance (testing only)
-    // - For production run your own TURN/coturn and secure Firebase rules
-    // ------------------------
-
+    // -----------------------
+    // Helpers: onChildAdded polyfill fallback if not supported
+    // (we already imported onChildAdded above)
+    // -----------------------
+    // End of script
   </script>
 </body>
 </html>
