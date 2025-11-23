@@ -301,14 +301,7 @@
     let audioEnabled = true;
     let videoEnabled = true;
 
-    // Check if user is logged in, otherwise redirect
-    function checkAuth() {
-      if (!myUid || !myName) {
-        window.location.href = 'auth.html?message=Please login to connect';
-        return false;
-      }
-      return true;
-    }
+  
 
     // Show user info
     function showMe() {
