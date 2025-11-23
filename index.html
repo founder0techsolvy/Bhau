@@ -1,767 +1,870 @@
 <!doctype html>
-<html lang="hi">
+<html lang="en">
 <head>
-  <meta charset="utf-8"/>
-  <meta name="viewport" content="width=device-width,initial-scale=1"/>
-  <title>ConnectNow — P2P Video (Demo)</title>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>ConnectNow — P2P Video (WhatsApp + Snapchat UX)</title>
+
+  <!-- Tailwind CDN -->
   <script src="https://cdn.tailwindcss.com"></script>
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+  <!-- Firebase (compat libraries for simpler code in single-file) -->
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+
   <style>
-    /* WhatsApp-inspired theme */
-    :root {
-      --whatsapp-green: #128C7E;
-      --whatsapp-light-green: #25D366;
-      --whatsapp-teal-green: #075E54;
-      --whatsapp-blue: #34B7F1;
-      --whatsapp-chat-bg: #e5ddd5;
-      --whatsapp-dark-bg: #111b21;
-      --whatsapp-panel-bg: #202c33;
-    }
-    
-    body {
-      background-color: var(--whatsapp-dark-bg);
-      color: #e9edef;
-    }
-    
-    .whatsapp-bg {
-      background-color: var(--whatsapp-dark-bg);
-    }
-    
-    .whatsapp-panel-bg {
-      background-color: var(--whatsapp-panel-bg);
-    }
-    
-    .whatsapp-green {
-      background-color: var(--whatsapp-green);
-    }
-    
-    .whatsapp-light-green {
-      background-color: var(--whatsapp-light-green);
-    }
-    
-    .whatsapp-teal {
-      background-color: var(--whatsapp-teal-green);
-    }
-    
-    .whatsapp-blue {
-      background-color: var(--whatsapp-blue);
-    }
-    
-    .whatsapp-shadow {
-      box-shadow: 0 2px 5px rgba(11, 20, 26, 0.5);
-    }
-    
-    /* small modal blur for incoming call */
-    .ringing { 
-      animation: pulse 1s infinite; 
-      border: 2px solid var(--whatsapp-light-green);
-    }
-    
-    @keyframes pulse { 
-      0% { transform: scale(1); } 
-      50% { transform: scale(1.02);} 
-      100% { transform: scale(1); } 
-    }
-    
-    /* Custom scrollbar */
-    ::-webkit-scrollbar {
-      width: 6px;
-    }
-    
-    ::-webkit-scrollbar-track {
-      background: rgba(0,0,0,0.1);
-    }
-    
-    ::-webkit-scrollbar-thumb {
-      background: rgba(255,255,255,0.2);
-      border-radius: 3px;
-    }
-    
-    /* Video container styling */
-    .video-container {
-      position: relative;
-      border-radius: 12px;
-      overflow: hidden;
-      background: #000;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-    }
-    
-    .video-label {
-      position: absolute;
-      bottom: 10px;
-      left: 10px;
-      background: rgba(0,0,0,0.6);
-      padding: 4px 8px;
-      border-radius: 4px;
-      font-size: 0.75rem;
-    }
-    
-    /* Call buttons */
-    .call-btn {
-      transition: all 0.2s ease;
-    }
-    
-    .call-btn:hover {
-      transform: scale(1.05);
-    }
-    
-    /* User list items */
-    .user-item {
-      transition: background-color 0.2s ease;
-      border-bottom: 1px solid rgba(255,255,255,0.05);
-    }
-    
-    .user-item:hover {
-      background-color: rgba(255,255,255,0.05);
-    }
-    
-    /* Responsive adjustments */
-    @media (max-width: 768px) {
-      .grid-cols-3 {
-        grid-template-columns: 1fr;
-      }
-      
-      .col-span-1, .col-span-2 {
-        grid-column: span 1;
-      }
-      
-      .users-container {
-        max-height: 300px;
-        overflow-y: auto;
-      }
-    }
+    /* Extra inline styles for transitions and subtle UI touches */
+    .snap-popup-enter { transform: translateY(-30px); opacity: 0; }
+    .snap-popup-enter-active { transform: translateY(0); opacity: 1; transition: transform .25s ease, opacity .25s ease; }
+    .snap-slide-in { transform: translateX(100%); }
+    .snap-slide-in-active { transform: translateX(0); transition: transform .3s ease; }
+    .controls-fade { transition: opacity .3s; }
+    .hidden-by-inactivity { opacity: 0 !important; pointer-events: none !important; }
+    /* camera-first feeling: gradient background while camera warms up */
+    .camera-bg { background: linear-gradient(180deg, #0f172a 0%, #020617 100%); }
   </style>
 </head>
-<body class="whatsapp-bg min-h-screen">
-  <div class="max-w-6xl mx-auto p-4">
-    <!-- Header -->
-    <header class="flex items-center justify-between mb-6 p-4 whatsapp-teal rounded-lg whatsapp-shadow">
+<body class="bg-slate-900 text-slate-100 min-h-screen camera-bg">
+
+<!-- Root app shell -->
+<div id="app" class="min-h-screen flex flex-col md:flex-row">
+
+  <!-- Sidebar: WhatsApp-like user list -->
+  <aside id="sidebar" class="w-full md:w-80 bg-slate-800/60 backdrop-blur-md md:h-screen md:overflow-y-auto p-3">
+    <div class="flex items-center justify-between mb-4">
       <div class="flex items-center gap-3">
-        <div class="w-10 h-10 rounded-full whatsapp-light-green flex items-center justify-center">
-          <i class="fas fa-video text-white"></i>
-        </div>
+        <div id="myAvatar" class="w-12 h-12 rounded-full bg-blue-500 flex items-center justify-center text-xl font-bold">U</div>
         <div>
-          <h1 class="text-xl font-semibold">ConnectNow</h1>
-          <p class="text-xs opacity-80">Peer-to-Peer Video Calls</p>
+          <div id="myName" class="text-sm font-semibold">Loading...</div>
+          <div id="myStatus" class="text-xs text-slate-300">Connecting...</div>
         </div>
       </div>
-      <div id="meInfo" class="text-sm flex items-center gap-2">
-        <div class="w-8 h-8 rounded-full bg-gray-600 flex items-center justify-center text-xs">
-          <i class="fas fa-user"></i>
-        </div>
-        <span id="userName" class="font-medium">Guest</span>
-      </div>
-    </header>
-
-    <!-- Main Content -->
-    <div class="grid grid-cols-3 gap-6">
-      <!-- Users list -->
-      <div class="col-span-1 whatsapp-panel-bg p-4 rounded-xl whatsapp-shadow">
-        <div class="flex items-center justify-between mb-4">
-          <h2 class="font-medium text-lg">Contacts</h2>
-          <div class="text-xs whatsapp-green px-2 py-1 rounded-full" id="onlineCount">0 online</div>
-        </div>
-        <div id="usersList" class="space-y-2 users-container max-h-[500px] overflow-y-auto"></div>
-      </div>
-
-      <!-- Video area -->
-      <div class="col-span-2 whatsapp-panel-bg p-6 rounded-xl whatsapp-shadow">
-        <div class="flex justify-between items-center mb-6">
-          <div>
-            <h3 class="font-medium text-lg">Video Call</h3>
-            <p id="callStatus" class="text-sm opacity-80 mt-1">Ready to connect</p>
-          </div>
-          <div class="flex gap-3">
-            <button id="muteBtn" class="whatsapp-panel-bg w-10 h-10 rounded-full flex items-center justify-center hidden">
-              <i class="fas fa-microphone"></i>
-            </button>
-            <button id="videoBtn" class="whatsapp-panel-bg w-10 h-10 rounded-full flex items-center justify-center hidden">
-              <i class="fas fa-video"></i>
-            </button>
-            <button id="hangupBtn" class="bg-red-500 w-10 h-10 rounded-full flex items-center justify-center hidden">
-              <i class="fas fa-phone"></i>
-            </button>
-          </div>
-        </div>
-
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div class="video-container">
-            <video id="localVideo" autoplay playsinline muted class="w-full h-64 md:h-80 object-cover"></video>
-            <div class="video-label">You</div>
-          </div>
-          <div class="video-container">
-            <video id="remoteVideo" autoplay playsinline class="w-full h-64 md:h-80 object-cover"></video>
-            <div class="video-label">Remote</div>
-          </div>
-        </div>
-        
-        <!-- Call controls (visible during call) -->
-        <div id="callControls" class="flex justify-center gap-4 mt-6 hidden">
-          <button id="muteControl" class="whatsapp-panel-bg w-12 h-12 rounded-full flex items-center justify-center call-btn">
-            <i class="fas fa-microphone"></i>
-          </button>
-          <button id="videoControl" class="whatsapp-panel-bg w-12 h-12 rounded-full flex items-center justify-center call-btn">
-            <i class="fas fa-video"></i>
-          </button>
-          <button id="hangupControl" class="bg-red-500 w-12 h-12 rounded-full flex items-center justify-center call-btn">
-            <i class="fas fa-phone rotate-135"></i>
-          </button>
-        </div>
+      <div class="flex items-center gap-2">
+        <button id="toggleSidebar" class="p-2 rounded-md hover:bg-slate-700/40">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h10M4 18h16"/></svg>
+        </button>
+        <button id="logoutBtn" class="p-2 rounded-md hover:bg-red-600/20" title="Logout">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-rose-400" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M3 4a1 1 0 011-1h6a1 1 0 110 2H5v10h5a1 1 0 110 2H4a1 1 0 01-1-1V4zm11.293.293a1 1 0 011.414 0l3 3A1 1 0 0119 8v4a1 1 0 01-.293.707l-3 3a1 1 0 01-1.414-1.414L17.586 13H11a1 1 0 110-2h6.586l-2.293-2.293a1 1 0 010-1.414z" clip-rule="evenodd" /></svg>
+        </button>
       </div>
     </div>
 
-    <!-- Incoming call popup -->
-    <div id="incomingModal" class="fixed inset-0 flex items-center justify-center bg-black/70 z-50 hidden">
-      <div id="incomingCard" class="max-w-md w-full whatsapp-panel-bg p-6 rounded-2xl shadow-2xl text-center">
-        <div class="w-20 h-20 rounded-full whatsapp-green mx-auto mb-4 flex items-center justify-center ringing">
-          <i class="fas fa-phone text-white text-2xl"></i>
+    <div class="mb-3">
+      <input id="searchUsers" type="search" placeholder="Search users..." class="w-full p-2 rounded-md bg-slate-700/40 placeholder:text-slate-300 focus:ring-2 focus:ring-sky-500 outline-none" />
+    </div>
+
+    <div id="usersList" class="space-y-2">
+      <!-- user items appended here -->
+      <div class="text-center text-slate-400 text-sm py-8">Loading users...</div>
+    </div>
+  </aside>
+
+  <!-- Main content: chat + call panel -->
+  <main id="mainPanel" class="flex-1 p-3 md:h-screen md:overflow-hidden">
+    <div id="emptyState" class="h-full flex items-center justify-center">
+      <div class="text-center">
+        <h2 class="text-2xl font-semibold">Choose a user to chat or call</h2>
+        <p class="text-slate-400 mt-2">Find someone from the left, tap the video icon to call — Snapchat-style full-screen calling.</p>
+      </div>
+    </div>
+
+    <!-- Chat + call UI (hidden when no user selected) -->
+    <section id="chatPanel" class="hidden h-full flex flex-col md:flex-row gap-4">
+      <!-- Left: Conversation area (mobile top) -->
+      <div id="chatArea" class="flex-1 bg-slate-800/40 rounded-lg p-3 overflow-y-auto">
+        <div id="chatHeader" class="flex items-center justify-between mb-3">
+          <div class="flex items-center gap-3">
+            <div id="selAvatar" class="w-12 h-12 rounded-full bg-slate-600 flex items-center justify-center text-lg font-semibold">P</div>
+            <div>
+              <div id="selName" class="font-semibold">Person</div>
+              <div id="selStatusText" class="text-xs text-slate-300">offline</div>
+            </div>
+          </div>
+          <div class="flex items-center gap-2">
+            <button id="callBtn" title="Video Call" class="p-2 rounded-full bg-gradient-to-tr from-pink-500 to-yellow-400 shadow-lg transform hover:scale-105">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-black" viewBox="0 0 24 24" fill="currentColor"><path d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14v-4zM3 7a2 2 0 012-2h8a2 2 0 012 2v2h-2V7H5v10h8v-2h2v2a2 2 0 01-2 2H5a2 2 0 01-2-2V7z"/></svg>
+            </button>
+          </div>
         </div>
-        <div id="incomingFrom" class="text-xl font-semibold mb-1">Incoming Video Call</div>
-        <div id="incomingFromName" class="text-lg opacity-80 mb-6">Caller Name</div>
-        <div class="flex justify-center gap-4">
-          <button id="btnDecline" class="bg-red-500 w-14 h-14 rounded-full flex items-center justify-center call-btn">
-            <i class="fas fa-phone-slash text-white text-xl"></i>
-          </button>
-          <button id="btnAccept" class="whatsapp-light-green w-14 h-14 rounded-full flex items-center justify-center call-btn">
-            <i class="fas fa-phone text-white text-xl"></i>
-          </button>
+
+        <!-- messages area (local-only UI for now) -->
+        <div id="messagesContainer" class="space-y-3 pb-8">
+          <div class="text-slate-400 text-sm">This chat area is UI-only (messages can be added later). Use the call button to start a video call.</div>
         </div>
+
+        <div class="mt-auto pt-3">
+          <div class="flex gap-2">
+            <input id="msgInput" placeholder="Type a message (not stored yet)" class="flex-1 p-2 rounded-md bg-slate-700/30 outline-none" />
+            <button id="sendMsg" class="px-4 py-2 rounded-md bg-sky-600 hover:bg-sky-500">Send</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Right: small preview panel (or call controls) -->
+      <div id="rightPanel" class="w-full md:w-80 flex flex-col gap-3">
+        <div class="bg-slate-800/40 rounded-lg p-3">
+          <h3 class="text-sm font-semibold">Contact Info</h3>
+          <p id="contactInfo" class="text-slate-300 text-sm mt-2">Select a user to see details.</p>
+        </div>
+
+        <div id="recentCalls" class="bg-slate-800/40 rounded-lg p-3">
+          <h3 class="text-sm font-semibold">Calls</h3>
+          <div id="callLog" class="text-slate-300 mt-2 text-sm">No calls yet.</div>
+        </div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<!-- Floating Snapchat-style incoming call popup -->
+<div id="incomingPopupWrapper" class="fixed inset-0 flex items-start justify-center pointer-events-none z-50">
+  <div id="incomingPopup" class="mt-8 pointer-events-auto w-11/12 max-w-md bg-white/5 border border-slate-700 rounded-2xl p-4 shadow-xl snap-popup-enter">
+    <div class="flex items-center gap-3">
+      <div id="incomingAvatar" class="w-14 h-14 rounded-full bg-slate-600 flex items-center justify-center text-xl">C</div>
+      <div>
+        <div id="incomingTitle" class="text-white font-semibold">Incoming video call</div>
+        <div id="incomingFrom" class="text-slate-300 text-sm">From: Someone</div>
+      </div>
+      <div class="ml-auto flex gap-2">
+        <button id="rejectCall" class="w-12 h-12 rounded-full bg-red-600 flex items-center justify-center shadow">✕</button>
+        <button id="acceptCall" class="w-12 h-12 rounded-full bg-green-400 flex items-center justify-center shadow">✓</button>
       </div>
     </div>
   </div>
+</div>
 
-  <!-- small ringtone -->
-  <audio id="ringtone" loop>
-    <source src="https://actions.google.com/sounds/v1/alarms/phone_alerts_and_rings.ogg" type="audio/ogg">
-  </audio>
+<!-- Fullscreen Call UI (hidden initially) -->
+<div id="callScreen" class="fixed inset-0 z-40 hidden flex flex-col bg-black">
+  <!-- local preview overlay + remote big area -->
+  <div id="callVideoArea" class="relative flex-1">
+    <video id="remoteVideo" autoplay playsinline class="w-full h-full object-cover bg-black"></video>
+    <video id="localVideo" autoplay muted playsinline class="absolute right-4 top-4 w-28 h-48 rounded-xl border-2 border-white object-cover shadow-lg"></video>
 
-  <!-- Firebase + App logic -->
-  <script type="module">
-    // --------------------------
-    // 1) Replace with your Firebase config
-    // --------------------------
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-app.js";
-    import { getFirestore, collection, addDoc, doc, setDoc, onSnapshot, query, where, getDocs, updateDoc, deleteDoc, getDoc, orderBy } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore.js";
-    import { getDatabase, ref, set, onValue, onDisconnect, remove } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-database.js";
+    <!-- overlay controls that fade out on inactivity -->
+    <div id="callControls" class="absolute bottom-6 left-0 right-0 flex items-center justify-center gap-4 controls-fade">
+      <button id="toggleMic" class="p-3 rounded-full bg-white/10">🎤</button>
+      <button id="endCallBtn" class="p-3 rounded-full bg-red-500 text-white">End</button>
+      <button id="toggleCam" class="p-3 rounded-full bg-white/10">📷</button>
+    </div>
+  </div>
 
+  <!-- small slide-up info -->
+  <div id="callInfo" class="p-3 text-center text-sm text-slate-300">Connecting...</div>
+</div>
+
+<!-- Ringtone audio -->
+<audio id="ringtone" src="" preload="auto"></audio>
+
+<script>
+/* ===============================
+   CONFIG — PASTE YOUR FIREBASE CONFIG HERE
+   ===============================
+   Replace the following firebaseConfig object with your project's config.
+   Example (do NOT share these values publicly):
+   const firebaseConfig = {
+     apiKey: "AKIAXXX",
+     authDomain: "myproject.firebaseapp.com",
+     projectId: "myproject",
+     storageBucket: "myproject.appspot.com",
+     messagingSenderId: "...",
+     appId: "1:...:web:...",
+     databaseURL: "https://myproject-default-rtdb.firebaseio.com"
+   };
+*/
+  // Config
     const firebaseConfig = {
-      apiKey: "AIzaSyAwB8JWKIRK6Bkat-NdM6OyVAvdrBk5cmM",
-      authDomain: "capturedeep-126bf.firebaseapp.com",
-      databaseURL: "https://capturedeep-126bf-default-rtdb.firebaseio.com",
-      projectId: "capturedeep-126bf",
-      storageBucket: "capturedeep-126bf.appspot.com",
-      messagingSenderId: "527347157327",
-      appId: "1:527347157327:web:d7db7bb6d0fe021547dd3a",
-      measurementId: "G-VZEFR8X5BN"
+  apiKey: "AIzaSyAwB8JWKIRK6Bkat-NdM6OyVAvdrBk5cmM",
+  authDomain: "capturedeep-126bf.firebaseapp.com",
+  databaseURL: "https://capturedeep-126bf-default-rtdb.firebaseio.com",
+  projectId: "capturedeep-126bf",
+  storageBucket: "capturedeep-126bf.appspot.com",
+  messagingSenderId: "527347157327",
+  appId: "1:527347157327:web:d7db7bb6d0fe021547dd3a",
+  measurementId: "G-VZEFR8X5BN"
+};
+// Quick check: make sure config exists
+if (!firebaseConfig || !firebaseConfig.apiKey) {
+  // show minimal text & stop — user must paste config
+  document.body.innerHTML = `
+    <div class="min-h-screen flex items-center justify-center bg-slate-900 text-white p-6">
+      <div class="max-w-xl text-center">
+        <h1 class="text-2xl font-semibold mb-4">Firebase config missing</h1>
+        <p class="text-slate-300 mb-4">Please paste your Firebase config object into <code>firebaseConfig</code> in this file (near the top). Then reload.</p>
+        <p class="text-slate-400 text-sm">If you already have <code>auth.html</code>, keep it in the same folder and this app will redirect to it when the user is not logged in.</p>
+      </div>
+    </div>
+  `;
+  throw new Error('Missing Firebase config. Paste it into firebaseConfig.');
+}
+
+// Initialize Firebase
+firebase.initializeApp(firebaseConfig);
+const auth = firebase.auth();
+const db = firebase.firestore();
+const rdb = firebase.database();
+
+/* ===============================
+   TURN / STUN servers
+   NOTE: TURN credentials should be obtained from Metered / ExpressTURN where possible.
+   - Metered/OpenRelay has an "Open Relay" that historically is used with username/credential:
+     { username: "openrelayproject", credential: "openrelayproject" }
+     BUT you should generate/obtain credentials from Metered dashboard or ExpressTURN's ephemeral REST.
+   - ExpressTURN typically requires server-side ephemeral credential generation; you can replace below when you have them.
+   =============================== */
+const iceServers = [
+  { urls: 'stun:stun.l.google.com:19302' },
+  // Public Open Relay example (may work for testing; replace with your credentials for stability)
+  {
+    urls: [
+      'turn:openrelay.metered.ca:80?transport=udp',
+      'turn:openrelay.metered.ca:443?transport=tcp',
+      'turn:openrelay.metered.ca:443?transport=tcp'
+    ],
+    username: 'openrelayproject',    // public example — replace for production
+    credential: 'openrelayproject'   // replace with your metered/express credential
+  },
+  // ExpressTURN placeholder — if you have ephemeral creds, replace username/credential
+  //{
+  //  urls: 'turn:your-expressturn-host:3478',
+  //  username: 'exp_user',
+  //  credential: 'exp_pass'
+  //}
+];
+
+/* ===============================
+   App state and DOM
+   =============================== */
+let currentUser = null; // firebase auth user
+let selectedUser = null; // firestore user doc for the selected contact
+let callDocRef = null; // Firestore doc for the active call
+let pc = null; // RTCPeerConnection
+let localStream = null;
+let remoteStream = null;
+let callUnsubscribe = null;
+let candidatesUnsubscribe = null;
+let inactivityTimer = null;
+let ringtonePlaying = false;
+
+const usersListEl = document.getElementById('usersList');
+const myNameEl = document.getElementById('myName');
+const myStatusEl = document.getElementById('myStatus');
+const myAvatarEl = document.getElementById('myAvatar');
+const searchEl = document.getElementById('searchUsers');
+
+const chatPanel = document.getElementById('chatPanel');
+const selAvatar = document.getElementById('selAvatar');
+const selName = document.getElementById('selName');
+const selStatusText = document.getElementById('selStatusText');
+const callBtn = document.getElementById('callBtn');
+
+const incomingPopupWrapper = document.getElementById('incomingPopupWrapper');
+const incomingPopup = document.getElementById('incomingPopup');
+const incomingFrom = document.getElementById('incomingFrom');
+const incomingTitle = document.getElementById('incomingTitle');
+const acceptCallBtn = document.getElementById('acceptCall');
+const rejectCallBtn = document.getElementById('rejectCall');
+const incomingAvatar = document.getElementById('incomingAvatar');
+
+const ringtoneEl = document.getElementById('ringtone');
+// small ringtone: generated base64 or simple beep. For better UX replace with a file URL
+ringtoneEl.src = 'data:audio/ogg;base64,T2dnUwACAAAAAAAAAABVDzQIAAAAAH6kWAQF2b3JvMm1wAAA...'; // placeholder short silent-ish clip
+// NOTE: browsers may block autoplay; ringtone plays only after user interaction typically.
+
+const callScreen = document.getElementById('callScreen');
+const localVideoEl = document.getElementById('localVideo');
+const remoteVideoEl = document.getElementById('remoteVideo');
+const callControls = document.getElementById('callControls');
+const endCallBtn = document.getElementById('endCallBtn');
+const toggleMicBtn = document.getElementById('toggleMic');
+const toggleCamBtn = document.getElementById('toggleCam');
+
+/* ===============================
+   AUTH STATE
+   1) Auto-detect Firebase Auth state
+   2) If not logged in -> redirect to auth.html (and show message)
+   3) If logged in -> init app (presence, load users etc)
+   =============================== */
+auth.onAuthStateChanged(async user => {
+  if (!user) {
+    // Not logged in -> show message then redirect
+    alert('Please login to connect.');
+    window.location.href = 'auth.html';
+    return;
+  }
+  currentUser = user;
+  // set avatar/name in UI
+  const displayName = user.displayName || (user.email ? user.email.split('@')[0] : 'User');
+  myNameEl.textContent = displayName;
+  myAvatarEl.textContent = (displayName[0] || 'U').toUpperCase();
+  myStatusEl.textContent = 'Connecting...';
+  // init presence & listeners
+  await initPresence();
+  loadUsers();
+  listenIncomingCalls();
+});
+
+/* ===============================
+   Presence — Realtime Database
+   path: /status/{uid} = { state: 'online'|'offline', last_changed: timestamp }
+   Use onDisconnect to set offline.
+   =============================== */
+async function initPresence() {
+  try {
+    const uid = auth.currentUser.uid;
+    const userStatusDatabaseRef = rdb.ref('/status/' + uid);
+
+    // value to set when online
+    const isOnlineForDatabase = {
+      state: 'online',
+      last_changed: firebase.database.ServerValue.TIMESTAMP
     };
-    // --------------------------
-    // init
-    // --------------------------
-    const app = initializeApp(firebaseConfig);
-    const db = getFirestore(app);
-    const rdb = getDatabase(app);
 
-    // UI elements
-    const meInfo = document.getElementById('meInfo');
-    const userName = document.getElementById('userName');
-    const usersList = document.getElementById('usersList');
-    const onlineCount = document.getElementById('onlineCount');
-    
-    const incomingModal = document.getElementById('incomingModal');
-    const incomingCard = document.getElementById('incomingCard');
-    const incomingFrom = document.getElementById('incomingFrom');
-    const incomingFromName = document.getElementById('incomingFromName');
-    const btnAccept = document.getElementById('btnAccept');
-    const btnDecline = document.getElementById('btnDecline');
-    const ringtone = document.getElementById('ringtone');
-
-    const localVideo = document.getElementById('localVideo');
-    const remoteVideo = document.getElementById('remoteVideo');
-    const callStatus = document.getElementById('callStatus');
-    
-    const hangupBtn = document.getElementById('hangupBtn');
-    const muteBtn = document.getElementById('muteBtn');
-    const videoBtn = document.getElementById('videoBtn');
-    
-    const callControls = document.getElementById('callControls');
-    const hangupControl = document.getElementById('hangupControl');
-    const muteControl = document.getElementById('muteControl');
-    const videoControl = document.getElementById('videoControl');
-
-    // App state
-    let myUid = localStorage.getItem('myUid') || null;
-    let myName = localStorage.getItem('myName') || null;
-    let localStream = null;
-    let pc = null;
-    let currentCallDocRef = null;
-    let callersub = null;
-    let remoteCandidatesUnsub = null;
-    let callerCandidatesCol = null;
-    let calleeCandidatesCol = null;
-    let audioEnabled = true;
-    let videoEnabled = true;
-
-  
-
-    // Show user info
-    function showMe() {
-      if (myUid && myName) {
-        userName.textContent = myName;
-        // Create a user document in Firestore for presence
-        setDoc(doc(db, 'users', myUid), {
-          name: myName,
-          lastSeen: Date.now()
-        }, { merge: true }).catch(console.error);
-      } else {
-        checkAuth();
-      }
-    }
-
-    // Auto-init if logged in
-    if (checkAuth()) {
-      showMe();
-      startPresence();
-      loadUsersList();
-      startIncomingListener();
-      prepareMedia();
-    }
-
-    // ICE servers (with STUN and TURN)
-    const configuration = {
-      iceServers: [
-        { urls: 'stun:stun.l.google.com:19302' },
-        { urls: 'stun:stun1.l.google.com:19302' },
-        // Public TURN servers (replace with your own in production)
-        {
-          urls: 'turn:openrelay.metered.ca:80',
-          username: 'openrelayproject',
-          credential: 'openrelayproject'
-        },
-        {
-          urls: 'turn:openrelay.metered.ca:443',
-          username: 'openrelayproject',
-          credential: 'openrelayproject'
-        },
-        {
-          urls: 'turn:openrelay.metered.ca:443?transport=tcp',
-          username: 'openrelayproject',
-          credential: 'openrelayproject'
-        }
-      ]
+    const isOfflineForDatabase = {
+      state: 'offline',
+      last_changed: firebase.database.ServerValue.TIMESTAMP
     };
 
-    // --------------------------
-    // Presence (Realtime DB)
-    // --------------------------
-    function startPresence(){
-      const pRef = ref(rdb, `presence/${myUid}`);
-      set(pRef, { name: myName, online: true, ts: Date.now() }).catch(console.error);
-      onDisconnect(pRef).remove().catch(console.error);
-    }
-
-    // --------------------------
-    // Load registered users from Firestore 'users' collection
-    // --------------------------
-    let usersUnsub = null;
-    async function loadUsersList(){
-      const usersCol = collection(db, 'users');
-      usersUnsub = onSnapshot(usersCol, async (snap) => {
-        usersList.innerHTML = '';
-        let onlineUsers = 0;
-        
-        snap.forEach(docSnap => {
-          const data = docSnap.data();
-          const uid = docSnap.id;
-          if (uid === myUid) return; // don't show self
-          
-          const name = data.name || uid;
-          const avatar = data.avatarUrl || '';
-          
-          const item = document.createElement('div');
-          item.className = 'user-item p-3 rounded-lg cursor-pointer';
-          item.innerHTML = `
-            <div class="flex items-center justify-between">
-              <div class="flex items-center gap-3">
-                <div class="relative">
-                  <img src="${avatar || 'https://ui-avatars.com/api/?name='+encodeURIComponent(name)+'&background=128C7E&color=fff'}" 
-                       class="w-12 h-12 rounded-full object-cover"/>
-                  <span id="presence-${uid}" class="absolute -bottom-1 -right-1 w-3 h-3 bg-gray-500 rounded-full border-2 border-white"></span>
-                </div>
-                <div>
-                  <div class="font-medium">${name}</div>
-                  <div id="status-${uid}" class="text-xs opacity-70">Offline</div>
-                </div>
-              </div>
-              <button data-uid="${uid}" data-name="${name}" 
-                      class="call-btn whatsapp-green w-10 h-10 rounded-full flex items-center justify-center">
-                <i class="fas fa-video text-white"></i>
-              </button>
-            </div>
-          `;
-          usersList.appendChild(item);
-
-          // listen presence from RTDB
-          const presRef = ref(rdb, `presence/${uid}`);
-          onValue(presRef, (snap) => {
-            const presenceEl = document.getElementById(`presence-${uid}`);
-            const statusEl = document.getElementById(`status-${uid}`);
-            
-            if (!presenceEl || !statusEl) return;
-            
-            if (snap.exists()) {
-              const val = snap.val();
-              presenceEl.className = 'absolute -bottom-1 -right-1 w-3 h-3 bg-green-500 rounded-full border-2 border-white';
-              statusEl.textContent = 'Online';
-              onlineUsers++;
-              onlineCount.textContent = `${onlineUsers} online`;
-            } else {
-              presenceEl.className = 'absolute -bottom-1 -right-1 w-3 h-3 bg-gray-500 rounded-full border-2 border-white';
-              statusEl.textContent = 'Offline';
-            }
-          });
-        });
-
-        // attach click handlers to call buttons
-        document.querySelectorAll('.call-btn').forEach(btn => {
-          btn.onclick = () => {
-            const targetUid = btn.dataset.uid;
-            const targetName = btn.dataset.name;
-            startCall(targetUid, targetName);
-          };
-        });
-      });
-    }
-
-    // --------------------------
-    // Media (getUserMedia)
-    // --------------------------
-    async function prepareMedia(){
-      try {
-        localStream = await navigator.mediaDevices.getUserMedia({ 
-          video: { width: 1280, height: 720 },
-          audio: true 
-        });
-        localVideo.srcObject = localStream;
-      } catch (e) {
-        console.error('Could not get media', e);
-        alert('Please allow camera/mic or check device permissions.');
-      }
-    }
-
-    // Toggle audio
-    function toggleAudio() {
-      if (!localStream) return;
-      
-      audioEnabled = !audioEnabled;
-      localStream.getAudioTracks().forEach(track => {
-        track.enabled = audioEnabled;
-      });
-      
-      const icon = muteControl.querySelector('i');
-      if (audioEnabled) {
-        icon.className = 'fas fa-microphone';
-        muteControl.classList.remove('bg-red-500');
-        muteControl.classList.add('whatsapp-panel-bg');
-      } else {
-        icon.className = 'fas fa-microphone-slash';
-        muteControl.classList.remove('whatsapp-panel-bg');
-        muteControl.classList.add('bg-red-500');
-      }
-    }
-
-    // Toggle video
-    function toggleVideo() {
-      if (!localStream) return;
-      
-      videoEnabled = !videoEnabled;
-      localStream.getVideoTracks().forEach(track => {
-        track.enabled = videoEnabled;
-      });
-      
-      const icon = videoControl.querySelector('i');
-      if (videoEnabled) {
-        icon.className = 'fas fa-video';
-        videoControl.classList.remove('bg-red-500');
-        videoControl.classList.add('whatsapp-panel-bg');
-        localVideo.style.opacity = '1';
-      } else {
-        icon.className = 'fas fa-video-slash';
-        videoControl.classList.remove('whatsapp-panel-bg');
-        videoControl.classList.add('bg-red-500');
-        localVideo.style.opacity = '0.5';
-      }
-    }
-
-    // --------------------------
-    // Start Call (caller)
-    // --------------------------
-    async function startCall(targetUid, targetName){
-      if (!myUid) return;
-      
-      callStatus.textContent = `Calling ${targetName}...`;
-      hangupBtn.classList.remove('hidden');
-      callControls.classList.remove('hidden');
-
-      // make a call document
-      const callsCol = collection(db, 'calls');
-      const callDocRef = await addDoc(callsCol, {
-        from: myUid,
-        to: targetUid,
-        status: 'calling',
-        createdAt: Date.now(),
-      });
-      currentCallDocRef = callDocRef;
-
-      // create PeerConnection
-      pc = new RTCPeerConnection(configuration);
-
-      // add local tracks
-      localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
-
-      // create candidates collections
-      callerCandidatesCol = collection(callDocRef, 'callerCandidates');
-      calleeCandidatesCol = collection(callDocRef, 'calleeCandidates');
-
-      // onicecandidate -> add to firestore
-      pc.onicecandidate = async (event) => {
-        if (event.candidate) {
-          await addDoc(callerCandidatesCol, event.candidate.toJSON()).catch(console.error);
-        }
-      };
-
-      // when remote track arrives
-      pc.ontrack = (event) => {
-        console.log('remote track', event);
-        remoteVideo.srcObject = event.streams[0];
-      };
-
-      // create offer
-      const offer = await pc.createOffer();
-      await pc.setLocalDescription(offer);
-
-      // save offer to call doc
-      await updateDoc(callDocRef, {
-        offer: { type: offer.type, sdp: offer.sdp }
-      });
-
-      // Listen for callee answer
-      const unsubCallDoc = onSnapshot(callDocRef, async (snap) => {
-        const data = snap.data();
-        if (!data) return;
-        if (data.answer && pc && !pc.remoteDescription) {
-          const answer = new RTCSessionDescription(data.answer);
-          await pc.setRemoteDescription(answer);
-          callStatus.textContent = 'Connected';
-        }
-        if (data.status === 'declined') {
-          stopCall('Call declined');
-        }
-        if (data.status === 'ended') {
-          stopCall('Call ended by other user');
-        }
-      });
-
-      // Listen for callee ICE candidates
-      const calleeCandidatesQuery = collection(callDocRef, 'calleeCandidates');
-      const unsubCalleeCandidates = onSnapshot(calleeCandidatesQuery, (snap) => {
-        snap.docChanges().forEach(change => {
-          if (change.type === 'added') {
-            const cand = change.doc.data();
-            pc.addIceCandidate(new RTCIceCandidate(cand)).catch(console.error);
-          }
-        });
-      });
-
-      // save unsubscribers to cleanup
-      callersub = { unsubCallDoc, unsubCalleeCandidates };
-
-      console.log('Call started with id:', callDocRef.id);
-    }
-
-    // --------------------------
-    // Incoming Listener (receiver)
-    // --------------------------
-    function startIncomingListener(){
-      const callsCol = collection(db, 'calls');
-      onSnapshot(callsCol, (snap) => {
-        snap.docChanges().forEach(async change => {
-          if (change.type === 'added' || change.type === 'modified') {
-            const call = change.doc.data();
-            const id = change.doc.id;
-            if (call.to === myUid && call.status === 'calling') {
-              // incoming call
-              showIncomingPopup(id, call.from);
-            } else if (call.to === myUid && call.status === 'ended') {
-              // other ended
-              hideIncomingPopup();
-            }
-          }
-        });
-      });
-    }
-
-    // show incoming popup
-    async function showIncomingPopup(callId, fromUid) {
-      // fetch caller name from users collection if exists
-      const callerDoc = await getDoc(doc(db, 'users', fromUid)).catch(()=>null);
-      const callerName = (callerDoc && callerDoc.exists()) ? callerDoc.data().name : fromUid;
-
-      incomingFrom.textContent = `Incoming Video Call`;
-      incomingFromName.textContent = callerName;
-      incomingModal.classList.remove('hidden');
-      ringtone.play().catch(()=>{});
-
-      // store callRef for further actions
-      currentCallDocRef = doc(db, 'calls', callId);
-
-      // hook accept/decline handlers (one time)
-      btnAccept.onclick = () => acceptCall(callId, fromUid);
-      btnDecline.onclick = () => declineCall(callId);
-    }
-
-    function hideIncomingPopup(){
-      incomingModal.classList.add('hidden');
-      ringtone.pause();
-      ringtone.currentTime = 0;
-    }
-
-    // decline
-    async function declineCall(callId){
-      hideIncomingPopup();
-      const callRef = doc(db, 'calls', callId);
-      await updateDoc(callRef, { status: 'declined' }).catch(console.error);
-      currentCallDocRef = null;
-    }
-
-    // accept
-    async function acceptCall(callId, fromUid){
-      hideIncomingPopup();
-      callStatus.textContent = `In call`;
-      hangupBtn.classList.remove('hidden');
-      callControls.classList.remove('hidden');
-
-      const callRef = doc(db, 'calls', callId);
-      currentCallDocRef = callRef;
-
-      // create RTCPeerConnection
-      pc = new RTCPeerConnection(configuration);
-      localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
-
-      // candidate collection refs
-      callerCandidatesCol = collection(callRef, 'callerCandidates');
-      calleeCandidatesCol = collection(callRef, 'calleeCandidates');
-
-      // when ICE candidate generated by callee -> save to calleeCandidates
-      pc.onicecandidate = async (event) => {
-        if (event.candidate) {
-          await addDoc(calleeCandidatesCol, event.candidate.toJSON()).catch(console.error);
-        }
-      };
-
-      pc.ontrack = (event) => {
-        remoteVideo.srcObject = event.streams[0];
-      };
-
-      // get offer from call doc and setRemoteDescription
-      const callSnap = await getDoc(callRef);
-      const data = callSnap.data();
-      const offer = data.offer;
-      await pc.setRemoteDescription(new RTCSessionDescription(offer));
-
-      // create answer
-      const answer = await pc.createAnswer();
-      await pc.setLocalDescription(answer);
-
-      // update call doc with answer and status accepted
-      await updateDoc(callRef, {
-        answer: { type: answer.type, sdp: answer.sdp },
-        status: 'accepted'
-      });
-
-      // listen for caller candidates and add them
-      const callerCandsColRef = collection(callRef, 'callerCandidates');
-      const unsubCallerCandidates = onSnapshot(callerCandsColRef, (snap) => {
-        snap.docChanges().forEach(change => {
-          if (change.type === 'added') {
-            const cand = change.doc.data();
-            pc.addIceCandidate(new RTCIceCandidate(cand)).catch(console.error);
-          }
-        });
-      });
-
-      // listen if call ended by caller
-      const unsubCallDoc = onSnapshot(callRef, (snap) => {
-        const d = snap.data();
-        if (!d) return;
-        if (d.status === 'ended') {
-          stopCall('Call ended by other user');
-        }
-      });
-
-      callersub = { unsubCallerCandidates, unsubCallDoc };
-    }
-
-    // --------------------------
-    // Hangup / cleanup
-    // --------------------------
-    hangupBtn.addEventListener('click', async () => {
-      await endCall('ended');
-    });
-    
-    hangupControl.addEventListener('click', async () => {
-      await endCall('ended');
-    });
-    
-    muteControl.addEventListener('click', toggleAudio);
-    videoControl.addEventListener('click', toggleVideo);
-
-    async function stopCall(reason){
-      console.log('Stopping call:', reason);
-      callStatus.textContent = reason || 'Call ended';
-      hangupBtn.classList.add('hidden');
-      callControls.classList.add('hidden');
-      
-      // cleanup pc
-      if (pc) {
-        pc.getSenders().forEach(s => pc.removeTrack(s));
-        try { pc.close(); } catch(e){}
-        pc = null;
-      }
-      
-      // unsubscribe listeners
-      if (callersub) {
-        if (callersub.unsubCallDoc) callersub.unsubCallDoc();
-        if (callersub.unsubCalleeCandidates) callersub.unsubCalleeCandidates();
-        if (callersub.unsubCallerCandidates) callersub.unsubCallerCandidates();
-      }
-      
-      // unset remote video
-      remoteVideo.srcObject = null;
-      currentCallDocRef = null;
-    }
-
-    async function endCall(setStatus){
-      if (!currentCallDocRef) {
-        stopCall('No active call');
+    rdb.ref('.info/connected').on('value', function(snapshot) {
+      if (snapshot.val() === false) {
+        // client not connected to Realtime DB
+        myStatusEl.textContent = 'Offline';
         return;
       }
-      try {
-        await updateDoc(currentCallDocRef, { status: setStatus || 'ended' });
-      } catch(e){ console.warn(e); }
-      await stopCall('Call ended');
-    }
+      userStatusDatabaseRef.onDisconnect().set(isOfflineForDatabase).then(function() {
+        userStatusDatabaseRef.set(isOnlineForDatabase);
+        myStatusEl.textContent = 'Online';
+      });
+    });
+  } catch (e) {
+    console.error('Presence init failed', e);
+  }
+}
 
-    // --------------------------
-    // Utility: gracefully remove presence when tab closed
-    // --------------------------
-    window.addEventListener('beforeunload', () => {
-      if (myUid) {
-        const pRef = ref(rdb, `presence/${myUid}`);
-        remove(pRef).catch(()=>{});
-      }
+/* ===============================
+   Load Users from Firestore
+   Collection: 'users'
+   Each user doc expected to have: uid, name, avatarUrl (optional), bio (optional)
+   Show online status by reading /status/{uid} in Realtime DB
+   =============================== */
+let allUsersCache = [];
+async function loadUsers() {
+  usersListEl.innerHTML = '<div class="text-center text-slate-400 py-6">Loading users...</div>';
+  db.collection('users').onSnapshot(async snapshot => {
+    allUsersCache = [];
+    snapshot.forEach(doc => {
+      const data = doc.data();
+      allUsersCache.push({ id: doc.id, uid: data.uid || doc.id, name: data.name || data.displayName || 'No name', ...data });
+    });
+    renderUsers(allUsersCache);
+  }, err => {
+    usersListEl.innerHTML = `<div class="text-red-400">Failed to load users: ${err.message}</div>`;
+    console.error(err);
+  });
+}
+
+function renderUsers(usersList) {
+  const uidMe = auth.currentUser.uid;
+  const filtered = usersList.filter(u => u.uid !== uidMe);
+  if (!filtered.length) {
+    usersListEl.innerHTML = '<div class="text-slate-400 text-center py-8">No other users found.</div>';
+    return;
+  }
+  usersListEl.innerHTML = '';
+  filtered.forEach(user => {
+    const item = document.createElement('div');
+    item.className = 'p-3 rounded-lg hover:bg-slate-700/40 flex items-center gap-3 cursor-pointer';
+    item.innerHTML = `
+      <div class="w-12 h-12 rounded-full bg-slate-600 flex items-center justify-center text-lg font-semibold" data-uid="${user.uid}">${(user.name||'U')[0].toUpperCase()}</div>
+      <div class="flex-1">
+        <div class="flex items-center justify-between">
+          <div class="font-semibold">${user.name}</div>
+          <div id="status-${user.uid}" class="text-xs text-slate-300">…</div>
+        </div>
+        <div class="text-slate-400 text-sm">${user.bio || ''}</div>
+      </div>
+      <div class="ml-2 flex items-center gap-2">
+        <button class="videoCallIcon p-2 rounded-full bg-slate-700 hover:bg-slate-600" title="Call" data-uid="${user.uid}">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-white" viewBox="0 0 24 24" fill="currentColor"><path d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14v-4zM3 7a2 2 0 012-2h8a2 2 0 012 2v2h-2V7H5v10h8v-2h2v2a2 2 0 01-2 2H5a2 2 0 01-2-2V7z"/></svg>
+        </button>
+      </div>
+    `;
+    // click selects user
+    item.addEventListener('click', () => {
+      selectUser(user);
+    });
+    // button calls
+    item.querySelectorAll('.videoCallIcon').forEach(btn => {
+      btn.addEventListener('click', (ev) => {
+        ev.stopPropagation();
+        selectUser(user);
+        startCallTo(user.uid);
+      });
     });
 
-    console.log('App ready. Note: Now using STUN + TURN servers for better connectivity.');
-  </script>
+    usersListEl.appendChild(item);
+
+    // attach presence listener
+    const statusRef = rdb.ref('/status/' + user.uid);
+    statusRef.on('value', snap => {
+      const data = snap.val();
+      const el = document.getElementById('status-' + user.uid);
+      if (!el) return;
+      if (!data) {
+        el.textContent = 'offline';
+        el.className = 'text-xs text-red-400';
+      } else {
+        el.textContent = data.state === 'online' ? 'online' : 'offline';
+        el.className = 'text-xs ' + (data.state === 'online' ? 'text-green-400' : 'text-red-400');
+      }
+    });
+  });
+}
+
+/* ===============================
+   Select user -> show chat panel UI
+   =============================== */
+function selectUser(user) {
+  selectedUser = user;
+  selAvatar.textContent = (user.name[0] || 'P').toUpperCase();
+  selName.textContent = user.name;
+  selStatusText.textContent = 'checking status...';
+  // check presence one-time
+  rdb.ref('/status/' + user.uid).once('value').then(snap => {
+    const d = snap.val();
+    selStatusText.textContent = d && d.state === 'online' ? 'online' : 'offline';
+  });
+  chatPanel.classList.remove('hidden');
+  document.getElementById('emptyState').style.display = 'none';
+  // update right panel contact info
+  document.getElementById('contactInfo').textContent = 'UID: ' + user.uid + (user.bio ? (' • ' + user.bio) : '');
+}
+
+/* ===============================
+   CALL FLOW (Firestore as signaling)
+   Structure:
+   - Collection 'calls'
+   - New call doc created for each call with fields:
+     { caller: uid, callee: uid, status: 'ringing'|'accepted'|'rejected'|'ended', createdAt }
+   - Subcollections: 'callerCandidates' and 'calleeCandidates' store ICE candidate objects.
+   - When accepted, offer/answer exchange happens in the same doc.
+   =============================== */
+
+function generateCallId() {
+  return 'call_' + Math.random().toString(36).slice(2, 9);
+}
+
+/* Start a call TO calleeUid */
+async function startCallTo(calleeUid) {
+  if (!selectedUser || !calleeUid) return;
+  if (!auth.currentUser) { alert('Please login to call.'); return; }
+
+  // create call doc
+  const callId = generateCallId();
+  callDocRef = db.collection('calls').doc(callId);
+
+  // prepare peer connection
+  pc = createPeerConnection();
+
+  // local stream
+  try {
+    localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+    // attach to local preview in call UI only when call starts
+    localVideoEl.srcObject = localStream;
+    localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
+  } catch (err) {
+    alert('Camera/mic access denied or not available: ' + err.message);
+    console.error(err);
+    return;
+  }
+
+  // create offer
+  const offer = await pc.createOffer();
+  await pc.setLocalDescription(offer);
+
+  // write initial call doc
+  await callDocRef.set({
+    caller: auth.currentUser.uid,
+    callerName: auth.currentUser.displayName || auth.currentUser.email || 'Caller',
+    callee: calleeUid,
+    status: 'ringing',
+    offer: offer.toJSON ? offer.toJSON() : offer,
+    createdAt: firebase.firestore.FieldValue.serverTimestamp()
+  });
+
+  // create candidate subcollection listeners that will add to Firestore as candidates are found
+  const callerCandidatesCollection = callDocRef.collection('callerCandidates');
+  pc.onicecandidate = event => {
+    if (event.candidate) {
+      callerCandidatesCollection.add(event.candidate.toJSON()).catch(console.error);
+    }
+  };
+
+  // Play outgoing UI animation and show "ringing" on receiver via Firestore
+  openOutgoingCallUI(selectedUser);
+
+  // Listen for call doc updates (answer or status changes)
+  callUnsubscribe = callDocRef.onSnapshot(async snap => {
+    const data = snap.data();
+    if (!data) return;
+    if (data.status === 'accepted' && data.answer) {
+      const answerDesc = new RTCSessionDescription(data.answer);
+      await pc.setRemoteDescription(answerDesc);
+      // subscribe to calleeCandidates
+      callDocRef.collection('calleeCandidates').onSnapshot(snapshot => {
+        snapshot.docChanges().forEach(change => {
+          if (change.type === 'added') {
+            const cand = change.doc.data();
+            pc.addIceCandidate(new RTCIceCandidate(cand)).catch(console.error);
+          }
+        });
+      });
+    } else if (data.status === 'rejected') {
+      // callee rejected
+      stopCallCleanup();
+      alert('Call rejected.');
+    } else if (data.status === 'ended') {
+      stopCallCleanup();
+      // slide-back to chat UI
+      closeCallUI(true);
+    }
+  });
+}
+
+/* When a user is listening for incoming calls */
+function listenIncomingCalls() {
+  const uid = auth.currentUser.uid;
+  // listen for any call doc where callee == uid and status == 'ringing'
+  db.collection('calls').where('callee', '==', uid).where('status', '==', 'ringing')
+    .onSnapshot(snapshot => {
+      snapshot.docChanges().forEach(async change => {
+        if (change.type === 'added') {
+          const callDoc = change.doc;
+          const data = callDoc.data();
+          if (!data) return;
+          // Show incoming popup with data.callerName and caller uid
+          showIncomingPopup(callDoc.id, data);
+        }
+      });
+    });
+}
+
+/* Show incoming popup (Snapchat-style) */
+function showIncomingPopup(callId, data) {
+  incomingPopupWrapper.style.pointerEvents = 'auto';
+  incomingPopup.classList.add('snap-popup-enter-active');
+  incomingFrom.textContent = 'From: ' + (data.callerName || data.caller);
+  incomingTitle.textContent = 'Incoming video call';
+  incomingAvatar.textContent = (data.callerName ? data.callerName[0].toUpperCase() : 'C');
+
+  // play ringtone (try to play, may be blocked until user interaction on some browsers)
+  try { ringtoneEl.play().catch(()=>{}); ringtonePlaying = true; } catch(e){}
+
+  // accept handler
+  const acceptHandler = async () => {
+    // stop ringtone
+    try { ringtoneEl.pause(); ringtoneEl.currentTime = 0; } catch(e){}
+    ringtonePlaying = false;
+
+    // accept: create peer connection, set remote desc from offer, create answer and set to Firestore
+    callDocRef = db.collection('calls').doc(callId);
+    const pcLocal = createPeerConnection();
+    pc = pcLocal;
+
+    // get local stream
+    try {
+      localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+      localVideoEl.srcObject = localStream;
+      localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
+    } catch (err) {
+      alert('Camera/mic access required to accept call.');
+      console.error(err);
+      // reject the call automatically
+      await callDocRef.update({ status: 'rejected' });
+      hideIncomingPopup();
+      return;
+    }
+
+    // set remote offer
+    const offerDesc = new RTCSessionDescription(data.offer);
+    await pc.setRemoteDescription(offerDesc);
+
+    // create answer
+    const answer = await pc.createAnswer();
+    await pc.setLocalDescription(answer);
+
+    // write answer + status accepted
+    await callDocRef.update({
+      answer: answer.toJSON ? answer.toJSON() : answer,
+      status: 'accepted',
+      acceptedAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+
+    // add ICE candidates from caller
+    callDocRef.collection('callerCandidates').onSnapshot(snapshot => {
+      snapshot.docChanges().forEach(change => {
+        if (change.type === 'added') {
+          const cand = change.doc.data();
+          pc.addIceCandidate(new RTCIceCandidate(cand)).catch(console.error);
+        }
+      });
+    });
+
+    // when we gather our ICE, push to calleeCandidates
+    const calleeCandidatesCollection = callDocRef.collection('calleeCandidates');
+    pc.onicecandidate = event => {
+      if (event.candidate) {
+        calleeCandidatesCollection.add(event.candidate.toJSON()).catch(console.error);
+      }
+    };
+
+    // open full-screen call UI
+    openIncomingCallUI(data.callerName || data.caller);
+
+    // hide popup
+    hideIncomingPopup();
+  };
+
+  const rejectHandler = async () => {
+    // stop ringtone
+    try { ringtoneEl.pause(); ringtoneEl.currentTime = 0; } catch(e){}
+    ringtonePlaying = false;
+
+    // set call doc status to rejected
+    await db.collection('calls').doc(callId).update({ status: 'rejected', rejectedAt: firebase.firestore.FieldValue.serverTimestamp() });
+    hideIncomingPopup();
+  };
+
+  acceptCallBtn.onclick = acceptHandler;
+  rejectCallBtn.onclick = rejectHandler;
+
+  // show popup (it auto-hides if user rejects or accepts)
+  incomingPopupWrapper.style.display = 'flex';
+}
+
+/* Hide incoming popup */
+function hideIncomingPopup() {
+  incomingPopupWrapper.style.pointerEvents = 'none';
+  incomingPopup.classList.remove('snap-popup-enter-active');
+  incomingPopupWrapper.style.display = 'none';
+}
+
+/* Create RTCPeerConnection with our ICE servers and event handlers */
+function createPeerConnection() {
+  const pcLocal = new RTCPeerConnection({ iceServers });
+
+  // create remote stream and attach to <video>
+  remoteStream = new MediaStream();
+  remoteVideoEl.srcObject = remoteStream;
+
+  pcLocal.ontrack = event => {
+    event.streams[0].getTracks().forEach(track => remoteStream.addTrack(track));
+  };
+
+  pcLocal.onconnectionstatechange = () => {
+    console.log('Connection state:', pcLocal.connectionState);
+    if (pcLocal.connectionState === 'disconnected' || pcLocal.connectionState === 'failed') {
+      // show message and cleanup
+      stopCallCleanup();
+      closeCallUI();
+    }
+  };
+
+  pcLocal.oniceconnectionstatechange = () => {
+    console.log('ICE state:', pcLocal.iceConnectionState);
+  };
+
+  return pcLocal;
+}
+
+/* Open outgoing call UI (caller) — Snapchat-style slide with camera-first feel */
+function openOutgoingCallUI(callee) {
+  // show call screen with animation
+  callScreen.classList.remove('hidden');
+  callScreen.classList.add('flex');
+  // small UI tweaks
+  document.body.style.overflow = 'hidden';
+  // show "Ringing..." info
+  document.getElementById('callInfo').textContent = 'Ringing ' + (selectedUser.name || selectedUser.uid);
+  startCallControlsInactivity();
+  // remote video area will show once connection established
+}
+
+/* Open incoming call UI (answer path) — full-screen */
+function openIncomingCallUI(callerName) {
+  callScreen.classList.remove('hidden');
+  callScreen.classList.add('flex');
+  document.body.style.overflow = 'hidden';
+  document.getElementById('callInfo').textContent = 'Call with ' + callerName;
+  startCallControlsInactivity();
+}
+
+/* Close call UI and return to chat UI with slide-back animation */
+function closeCallUI(useSlideBack = false) {
+  // hide call screen (slide-back animation can be simulated with CSS transitions)
+  callScreen.classList.add('hidden');
+  document.body.style.overflow = '';
+  // stop local preview and remote
+  if (localStream) {
+    localStream.getTracks().forEach(t => t.stop());
+    localStream = null;
+  }
+  if (remoteStream) {
+    remoteStream.getTracks().forEach(t => t.stop());
+    remoteStream = null;
+  }
+  // ensure peer connection closed
+  if (pc) {
+    try { pc.close(); } catch(e){}
+    pc = null;
+  }
+  // bring back chat panel
+  chatPanel.classList.remove('hidden');
+}
+
+/* End call (either side) */
+async function endCall() {
+  try {
+    // update call doc status to 'ended' so both parties know
+    if (callDocRef) {
+      await callDocRef.update({ status: 'ended', endedAt: firebase.firestore.FieldValue.serverTimestamp() });
+    }
+  } catch (e) {}
+  stopCallCleanup();
+  closeCallUI(true);
+}
+
+/* Cleanup local state & Firestore listeners */
+async function stopCallCleanup() {
+  // remove listeners
+  if (callUnsubscribe) {
+    try { callUnsubscribe(); } catch(e){}
+    callUnsubscribe = null;
+  }
+  // close pc
+  if (pc) {
+    try { pc.close(); } catch(e){}
+    pc = null;
+  }
+  // stop local stream
+  if (localStream) {
+    localStream.getTracks().forEach(t => t.stop());
+    localStream = null;
+  }
+  // stop ringtone
+  try { ringtoneEl.pause(); ringtoneEl.currentTime = 0; } catch(e){}
+  ringtonePlaying = false;
+}
+
+/* ===============================
+   UI: Incoming popup buttons were wired above. End call button:
+   =============================== */
+endCallBtn.addEventListener('click', endCall);
+toggleMicBtn.addEventListener('click', () => {
+  if (!localStream) return;
+  const audioTrack = localStream.getAudioTracks()[0];
+  if (!audioTrack) return;
+  audioTrack.enabled = !audioTrack.enabled;
+  toggleMicBtn.textContent = audioTrack.enabled ? '🎤' : '🔇';
+});
+toggleCamBtn.addEventListener('click', () => {
+  if (!localStream) return;
+  const videoTrack = localStream.getVideoTracks()[0];
+  if (!videoTrack) return;
+  videoTrack.enabled = !videoTrack.enabled;
+  toggleCamBtn.textContent = videoTrack.enabled ? '📷' : '🚫';
+});
+
+/* When window/tab closed — auto cleanup and set presence offline */
+window.addEventListener('beforeunload', async () => {
+  try {
+    // set status offline manually (onDisconnect should handle it, but do best-effort)
+    const uid = auth.currentUser && auth.currentUser.uid;
+    if (uid) {
+      await rdb.ref('/status/' + uid).set({ state: 'offline', last_changed: Date.now() });
+    }
+  } catch(e){}
+});
+
+/* ===============================
+   Controls fade-out (Snapchat behavior)
+   Controls hide after inactivity; appear on touch/click.
+   =============================== */
+function startCallControlsInactivity() {
+  showControls();
+  function resetTimer() {
+    showControls();
+    if (inactivityTimer) clearTimeout(inactivityTimer);
+    inactivityTimer = setTimeout(() => {
+      hideControls();
+    }, 3000);
+  }
+  ['mousemove','touchstart','click'].forEach(evt => {
+    document.addEventListener(evt, resetTimer);
+  });
+  resetTimer();
+}
+
+function showControls() {
+  callControls.classList.remove('hidden-by-inactivity');
+  callControls.style.opacity = '1';
+}
+function hideControls() {
+  callControls.classList.add('hidden-by-inactivity');
+  callControls.style.opacity = '0.0';
+}
+
+/* ===============================
+   Incoming popup accept/reject wired earlier: reject will set call status 'rejected'
+   Caller side: when callee rejects, we clean up earlier.
+   =============================== */
+
+/* ===============================
+   UI: small helpers for toggles and search
+   =============================== */
+document.getElementById('toggleSidebar').addEventListener('click', () => {
+  const sb = document.getElementById('sidebar');
+  sb.classList.toggle('hidden');
+});
+
+document.getElementById('logoutBtn').addEventListener('click', () => {
+  auth.signOut().then(() => {
+    window.location.href = 'auth.html';
+  });
+});
+
+searchEl.addEventListener('input', (e) => {
+  const q = e.target.value.trim().toLowerCase();
+  if (!q) return renderUsers(allUsersCache);
+  renderUsers(allUsersCache.filter(u => (u.name||'').toLowerCase().includes(q)));
+});
+
+/* Minimal send message UI (not stored in Firestore by default) */
+document.getElementById('sendMsg').addEventListener('click', () => {
+  const text = document.getElementById('msgInput').value.trim();
+  if (!text) return;
+  const msgEl = document.createElement('div');
+  msgEl.className = 'bg-slate-700/40 p-2 rounded-md inline-block';
+  msgEl.textContent = text;
+  document.getElementById('messagesContainer').appendChild(msgEl);
+  document.getElementById('msgInput').value = '';
+});
+
+/* Helper: start call to selected user through main UI callBtn */
+callBtn.addEventListener('click', () => {
+  if (!selectedUser) return alert('Select a user to call.');
+  startCallTo(selectedUser.uid);
+});
+
+/* ===============================
+   Add some comments and guidance for deployment:
+   - Make sure to create a Firestore collection 'users' and add user docs when users sign up (auth.html should write them).
+   - Call docs appear in 'calls' collection; for debugging open Firestore console and watch call docs + candidate subcollections.
+   - For best ICE reliability, provision TURN credentials from Metered (https://metered.ca) or ExpressTURN and replace the placeholder credentials above.
+   - This is frontend-only — no backend required. ExpressTURN can create ephemeral credentials via a server endpoint if you later add one, but it's optional for dev.
+   =============================== */
+
+</script>
 </body>
 </html>
